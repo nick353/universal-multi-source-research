@@ -1,0 +1,66 @@
+#!/usr/bin/env python3
+"""Save a research brief to the stable Universal Research report directory."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+from datetime import datetime
+from pathlib import Path
+
+
+DEFAULT_REPORT_DIR = Path.home() / "Documents" / "Codex" / "Universal Research" / "reports"
+
+
+def slugify(value: str) -> str:
+    value = re.sub(r"[^\w\-\u3040-\u30ff\u3400-\u9fff ]+", "", value, flags=re.UNICODE)
+    value = re.sub(r"[\s_]+", "-", value.strip())
+    return (value[:80].strip("-") or "research-brief").lower()
+
+
+def combine(coverage: str, report: str) -> str:
+    coverage = coverage.strip()
+    report = report.lstrip()
+    if coverage and report.startswith("## 調査状況"):
+        return report.rstrip() + "\n"
+    if coverage:
+        return coverage.rstrip() + "\n\n" + report.rstrip() + "\n"
+    return report.rstrip() + "\n"
+
+
+def choose_path(directory: Path, topic: str, now: datetime) -> Path:
+    stamp = now.astimezone().strftime("%Y%m%d-%H%M%S")
+    base = directory / f"{stamp}-{slugify(topic)}.md"
+    candidate = base
+    index = 2
+    while candidate.exists():
+        candidate = directory / f"{stamp}-{slugify(topic)}-{index}.md"
+        index += 1
+    return candidate
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--input", required=True, help="Completed research brief Markdown")
+    parser.add_argument("--coverage", help="Rendered source coverage Markdown")
+    parser.add_argument("--topic", required=True, help="Short topic used for the filename")
+    parser.add_argument("--report-dir", help="Override the stable report directory for tests or local policy")
+    parser.add_argument("--output", help="Explicit output path")
+    args = parser.parse_args()
+
+    report = Path(args.input).read_text(encoding="utf-8")
+    coverage = Path(args.coverage).read_text(encoding="utf-8") if args.coverage else ""
+    configured_dir = os.environ.get("UNIVERSAL_RESEARCH_REPORT_DIR")
+    directory = Path(args.report_dir or configured_dir or DEFAULT_REPORT_DIR).expanduser()
+    directory.mkdir(parents=True, exist_ok=True)
+    output = Path(args.output).expanduser() if args.output else choose_path(directory, args.topic, datetime.now().astimezone())
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(combine(coverage, report), encoding="utf-8")
+    print(json.dumps({"saved": True, "path": str(output.resolve()), "directory": str(output.parent.resolve())}, ensure_ascii=False))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

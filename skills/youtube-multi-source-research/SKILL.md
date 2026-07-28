@@ -5,7 +5,7 @@ description: "Research a topic, question, one or more URLs, or an existing trans
 
 # Universal Multi-Source Research
 
-Use this Skill as a read-only, topic-first research orchestrator. The input may be a question, a topic, one URL, many URLs, or a transcript/document. Automatically choose every relevant configured source, include ordinary Web search and source-page reading, collect multiple independent YouTube videos when YouTube is relevant, compare claims and first-hand reports, and return a cited brief with coverage and uncertainty visible.
+Use this Skill as a read-only, topic-first research orchestrator. The input may be a question, a topic, one URL, many URLs, or a transcript/document. Automatically choose the research depth and every relevant configured source, include ordinary Web search and source-page reading, collect multiple independent YouTube videos when YouTube is relevant, compare claims and first-hand reports, save the completed brief to the stable report directory, and return a cited brief with coverage and uncertainty visible.
 
 The package slug remains `youtube-multi-source-research` for backwards compatibility. Its behavior is universal rather than YouTube-only.
 
@@ -19,6 +19,16 @@ Unless the user narrows the scope, make these four layers mandatory:
 4. **Query diversity:** run Japanese and English variants, synonyms/related terms, exact-entity queries, implementation/experience queries, and criticism/limitation/counterargument queries. Keep the query families in the research plan.
 
 If a platform or adapter is unavailable, record its status and continue; never reduce the target count silently or call unavailable coverage `no_results`.
+
+## Automatic research mode
+
+Do not ask the user to choose a mode. Run `scripts/plan_research.py` with its default `--mode auto` and use the selected mode in the plan and report.
+
+- **Quick**: short factual checks, definitions, “要点だけ”, or an explicitly single-video request. Target 3–5 YouTube videos and a smaller query set; add community sources when the seed or wording makes them relevant.
+- **Standard**: the default for a normal topic or URL investigation. Search the core configured set and target 5–10 diverse YouTube videos.
+- **Deep**: automatically choose for comparisons, multiple URLs, “最新/評判/実体験/問題点/台本/徹底”, broad cross-platform requests, or long/complex questions. Target 8–12 YouTube videos and keep all core query families.
+
+Source selection remains automatic inside the selected mode. A seed URL always forces its own platform and required corroboration sources into the plan. If the user explicitly requests a mode, honor it; otherwise never expose a mode-selection question.
 
 ## First-run setup and user guidance
 
@@ -51,11 +61,11 @@ Use the source status from the diagnostic output. Do not ask the user to paste c
 
 When the user gives no URL, infer the entities, products, people, dates, handles, subreddits, repositories, and disputed terms in the question. Create the mandatory query families from the default research depth: original wording, Japanese, English, synonyms/related terms, exact names, official/primary source, news, implementation/tutorial, experience/review, criticism/limitations, and counterargument/alternative view. Route the plan to YouTube, X, Reddit, ordinary Web search and page reading, GitHub, Hacker News, and RSS by default; add configured optional sources such as TikTok, Instagram, Bluesky, LinkedIn, arXiv, Polymarket, Bilibili, or Xiaohongshu when they are relevant and available.
 
-When YouTube is relevant, search for multiple candidate videos rather than selecting the first result. Prefer a diverse set: independent creators, official/primary channels, specialist explainers, recent updates, and credible counterpoints. Deduplicate near-identical reposts and cap the set using the source health, relevance, date, and diversity available in the active adapter. A normal default is 5–10 videos, with fewer only when the topic is narrow or the source returns fewer usable results.
+When YouTube is relevant, search for multiple candidate videos rather than selecting the first result. Prefer a diverse set: independent creators, official/primary channels, specialist explainers, recent updates, and credible counterpoints. Deduplicate near-identical reposts and cap the set using the selected automatic mode, source health, relevance, date, and diversity available in the active adapter.
 
 ### One or more URLs
 
-Run `scripts/plan_research.py` first. A single X post, X thread, Reddit post, Reddit comment permalink, subreddit URL, or a mixture of these and other URLs is a valid input. Classify each URL and expand it into related evidence:
+Run `scripts/plan_research.py --mode auto` first. A single X post, X thread, Reddit post, Reddit comment permalink, subreddit URL, or a mixture of these and other URLs is a valid input. Classify each URL and expand it into related evidence:
 
 | Seed URL | Required expansion |
 | --- | --- |
@@ -84,12 +94,14 @@ Create a working packet containing:
 - language variants, normally Japanese and English when relevant;
 - query families: exact, Japanese, English, synonym/related, official/primary, news, implementation, experience, criticism/limitations, and counterargument;
 - source list, collection targets, expected result count, and source status;
+- the automatically selected mode and the reason for selecting it;
 - whether the user wants facts, opinions, reactions, implementation evidence, market sentiment, or first-hand experiences.
 
 Use the deterministic planner:
 
 ```bash
 python3 scripts/plan_research.py \
+  --mode auto \
   --question "ユーザーの質問" \
   "https://example.com/seed" \
   --out work/research-plan.json
@@ -154,7 +166,7 @@ When multiple videos cover the same claim, compare:
 
 ### 5. Search and collect every relevant configured platform
 
-Use every query family in the plan, claim-specific and entity-specific, rather than one giant transcript query. Search the default set in parallel where the active tools allow it: YouTube, X, Reddit, Web, GitHub, Hacker News, and RSS. Add relevant optional sources from the plan. Do not skip the Japanese, English, synonym, or counterargument families merely because the first query returned results.
+Use every query family in the plan, claim-specific and entity-specific, rather than one giant transcript query. Search the selected source set in parallel where the active tools allow it: YouTube, X, Reddit, Web, GitHub, Hacker News, and RSS. Add relevant optional sources from the plan. Do not skip a required query family in standard/deep mode merely because the first query returned results.
 
 Use ordinary Web search for broad discovery, official documentation, news, blogs, Q&A, and primary pages. For GitHub, inspect Issues and Discussions rather than only the README. For Reddit, inspect comments and parent/reply context rather than only post titles. Use last30days-skill for recent cross-source discovery according to its current contract. Use Agent-Reach or the configured official/API adapter for retrieval. Use PRAW when Reddit comments, scores, timestamps, or subreddit filtering need precise repeatability. Open and preserve primary URLs for important claims; a search snippet alone is not equivalent to a source.
 
@@ -174,16 +186,37 @@ At minimum preserve `source`, `url`, `published_at`, `retrieved_at`, `author`, `
 
 ### 7. Write the final brief
 
+Before the conclusion, create a source-status JSON packet and render it with:
+
+```bash
+python3 scripts/render_coverage.py \
+  --input work/source-status.json \
+  --out work/coverage.md
+```
+
+The packet must contain one record per planned source with `source`, `status`, `count`, and `reason`. Use the exact statuses `complete`, `partial`, `auth_required`, `blocked`, `no_results`, `not_configured`, or `error`. Put the rendered coverage block at the very top of the final answer, before the conclusion. Never represent an unavailable source as zero results without its reason.
+
 Use [references/report-template.md](references/report-template.md) and report:
 
-1. direct answer and confidence;
-2. what was searched: question, URLs, date window, languages, platforms, and number of usable YouTube videos;
-3. source coverage and blocked/not-configured routes;
+1. the source coverage block and automatically selected mode;
+2. direct answer and confidence;
+3. what was searched: question, URLs, date window, languages, platforms, and number of usable YouTube videos;
 4. claim-by-claim findings with timestamped video links where applicable;
 5. agreement, disagreement, and source-dependency across the multiple videos and other platforms;
 6. first-hand experiences, official/maintainer statements, and commentary as separate categories;
 7. practical implications and remaining uncertainty;
 8. direct source links with retrieval dates.
+
+After writing the brief, save it to the stable user directory with:
+
+```bash
+python3 scripts/save_report.py \
+  --input work/final-report.md \
+  --coverage work/coverage.md \
+  --topic "調査テーマ"
+```
+
+The default directory is `~/Documents/Codex/Universal Research/reports/`. Respect `UNIVERSAL_RESEARCH_REPORT_DIR` or `--report-dir` when the user has configured another local directory. Report the absolute saved path in the final answer.
 
 Say `not corroborated in the searched window` when a claim lacks independent support. Say `the selected sources agree` rather than presenting repeated or copied content as universal truth.
 
@@ -196,6 +229,7 @@ Say `not corroborated in the searched window` when a claim lacks independent sup
 - If a URL is inaccessible, use its host/path/title tokens for discovery but label the seed as inaccessible.
 - If a claim depends on an exact quote, retain the timestamp and link to the original video or post.
 - If the user asks for more depth, expand the date window, query variants, and source count before writing a stronger conclusion.
+- If source collection succeeds but coverage rendering or report saving fails, report the research result as complete/partial separately from the local-save error and include the exact restart command.
 
 ## References
 
@@ -203,4 +237,5 @@ Say `not corroborated in the searched window` when a claim lacks independent sup
 - Read [references/upstream-mapping.md](references/upstream-mapping.md) when choosing Agent-Reach, last30days-skill, and PRAW.
 - Read [references/evidence-schema.md](references/evidence-schema.md) before writing or validating source records.
 - Read [references/report-template.md](references/report-template.md) when producing a user-facing brief.
+- Use `scripts/render_coverage.py` for the mandatory source-status header and `scripts/save_report.py` for the stable local report path.
 - Use the upstream projects' current documentation: [Agent-Reach](https://github.com/Panniantong/Agent-Reach), [last30days-skill](https://github.com/mvanhorn/last30days-skill), and [PRAW](https://github.com/praw-dev/praw).
