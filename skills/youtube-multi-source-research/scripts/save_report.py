@@ -7,11 +7,13 @@ import argparse
 import json
 import os
 import re
+import shutil
 from datetime import datetime
 from pathlib import Path
 
 
 DEFAULT_REPORT_DIR = Path.home() / "Documents" / "Codex" / "Universal Research" / "reports"
+SAFE_ARTIFACT_SUFFIXES = {".json", ".jsonl", ".md", ".srt", ".txt", ".vtt"}
 
 
 def slugify(value: str) -> str:
@@ -41,12 +43,32 @@ def choose_path(directory: Path, topic: str, now: datetime) -> Path:
     return candidate
 
 
+def copy_transcript_artifacts(source: Path, output: Path) -> Path | None:
+    """Copy only transcript-like artifacts and return their destination."""
+    if not source.exists() or not source.is_dir():
+        return None
+    destination = output.parent / f"{output.stem}-artifacts" / "youtube"
+    copied = 0
+    for item in source.rglob("*"):
+        if not item.is_file() or item.suffix.lower() not in SAFE_ARTIFACT_SUFFIXES:
+            continue
+        relative = item.relative_to(source)
+        target = destination / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(item, target)
+        copied += 1
+    if not copied:
+        return None
+    return destination.parent
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", required=True, help="Completed research brief Markdown")
     parser.add_argument("--coverage", help="Rendered source coverage Markdown")
     parser.add_argument("--topic", required=True, help="Short topic used for the filename")
     parser.add_argument("--report-dir", help="Override the stable report directory for tests or local policy")
+    parser.add_argument("--artifacts-dir", help="Transcript artifact directory, normally work/youtube")
     parser.add_argument("--output", help="Explicit output path")
     args = parser.parse_args()
 
@@ -58,7 +80,14 @@ def main() -> int:
     output = Path(args.output).expanduser() if args.output else choose_path(directory, args.topic, datetime.now().astimezone())
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(combine(coverage, report), encoding="utf-8")
-    print(json.dumps({"saved": True, "path": str(output.resolve()), "directory": str(output.parent.resolve())}, ensure_ascii=False))
+    artifacts = copy_transcript_artifacts(Path(args.artifacts_dir).expanduser(), output) if args.artifacts_dir else None
+    result = {
+        "saved": True,
+        "path": str(output.resolve()),
+        "directory": str(output.parent.resolve()),
+        "artifacts_path": str(artifacts.resolve()) if artifacts else None,
+    }
+    print(json.dumps(result, ensure_ascii=False))
     return 0
 
 

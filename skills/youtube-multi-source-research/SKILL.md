@@ -30,6 +30,20 @@ Do not ask the user to choose a mode. Run `scripts/plan_research.py` with its de
 
 Source selection remains automatic inside the selected mode. A seed URL always forces its own platform and required corroboration sources into the plan. If the user explicitly requests a mode, honor it; otherwise never expose a mode-selection question.
 
+## Report display contract
+
+Write the final brief in Japanese unless the user requests another language. Optimize the first screen for a decision, not for dumping the evidence:
+
+1. source coverage and automatic mode;
+2. a short “あなた向けの判断” section;
+3. a 1-minute summary;
+4. a compact comparison table;
+5. YouTube transcript/index and script-ready points;
+6. separate official facts, X/Reddit first-hand reports, GitHub issues, ordinary Web evidence, counterpoints, and limitations;
+7. detailed claims and source links.
+
+Keep comparison-table cells short. Move long explanations to the sections below. Always distinguish a direct capture from a downstream researcher report and a source author's opinion from a verified fact.
+
 ## First-run setup and user guidance
 
 Before a live external research run, check the available acquisition runtime when it is installed:
@@ -142,6 +156,8 @@ python3 scripts/extract_transcript.py \
 
 The URL helper tries `agent-reach transcribe`, then `yt-dlp` subtitles. Audio download plus `faster-whisper` requires an explicit `--allow-audio` decision. Never silently download audio. Run the helper separately for each selected video and keep one manifest per video.
 
+Do not reduce the YouTube result to a few transcript snippets. Build a per-video transcript index with `full`, `partial`, or `unavailable` status, transcript type/language, key timestamps, and the relative artifact path. Preserve the complete normalized transcript as a local artifact when available; summarize it in the chat instead of dumping the full text into the final response.
+
 ### 4. Normalize and compare transcripts
 
 Chunk each transcript without silently truncating either end:
@@ -194,7 +210,7 @@ python3 scripts/render_coverage.py \
   --out work/coverage.md
 ```
 
-The packet must contain one record per planned source with `source`, `status`, `count`, and `reason`. Use the exact statuses `complete`, `partial`, `auth_required`, `blocked`, `no_results`, `not_configured`, or `error`. Put the rendered coverage block at the very top of the final answer, before the conclusion. Never represent an unavailable source as zero results without its reason.
+The packet must contain one record per planned source with `source`, `status`, `count`, `reason`, and preferably `retrieval_method` or `evidence_quality`. Use the exact statuses `complete`, `partial`, `auth_required`, `blocked`, `no_results`, `not_configured`, or `error`. Put the rendered coverage block at the very top of the final answer, before the conclusion. Never represent an unavailable source as zero results without its reason.
 
 Use [references/report-template.md](references/report-template.md) and report:
 
@@ -213,10 +229,11 @@ After writing the brief, save it to the stable user directory with:
 python3 scripts/save_report.py \
   --input work/final-report.md \
   --coverage work/coverage.md \
+  --artifacts-dir work/youtube \
   --topic "調査テーマ"
 ```
 
-The default directory is `~/Documents/Codex/Universal Research/reports/`. Respect `UNIVERSAL_RESEARCH_REPORT_DIR` or `--report-dir` when the user has configured another local directory. Report the absolute saved path in the final answer.
+The default directory is `~/Documents/Codex/Universal Research/reports/`. When `work/youtube` exists, copy only its transcript/metadata artifacts into a sibling `<report-name>-artifacts/youtube/` directory; never copy cookies, tokens, raw auth files, or unrelated evidence. Preserve the per-video transcript status and relative artifact path in the YouTube index. Respect `UNIVERSAL_RESEARCH_REPORT_DIR` or `--report-dir` when the user has configured another local directory. Report the absolute saved report and artifacts paths in the final answer.
 
 Say `not corroborated in the searched window` when a claim lacks independent support. Say `the selected sources agree` rather than presenting repeated or copied content as universal truth.
 

@@ -1,6 +1,6 @@
 interface:
   display_name: "Universal Multi-Source Research"
   short_description: "テーマ・URLから全媒体を横断調査"
-  default_prompt: "Use $youtube-multi-source-research to automatically choose the research depth, investigate this topic or URL across every relevant configured source, put source coverage and counts first, save the cited brief locally, and report any first-use setup needed."
+  default_prompt: "Use $youtube-multi-source-research to automatically choose the research depth, investigate this topic or URL across every relevant configured source, put source coverage and counts first, show script-ready YouTube transcript materials, save the cited brief locally, and report any first-use setup needed."
 policy:
   allow_implicit_invocation: true

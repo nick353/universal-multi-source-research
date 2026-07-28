@@ -156,6 +156,15 @@ class SkillScriptsTest(unittest.TestCase):
         self.assertIn("XやReddit", text)
         self.assertIn("Cookie、APIキー、トークンはチャットに貼らない", text)
 
+    def test_report_display_contract_is_present(self):
+        skill_text = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        template_text = (ROOT / "references" / "report-template.md").read_text(encoding="utf-8")
+        self.assertIn("Report display contract", skill_text)
+        self.assertIn("--artifacts-dir work/youtube", skill_text)
+        self.assertIn("あなた向けの判断", template_text)
+        self.assertIn("YouTube字幕・台本素材", template_text)
+        self.assertIn("媒体別の生の声と一次情報", template_text)
+
     def test_auto_mode_selects_quick_standard_and_deep(self):
         cases = [
             ("これは何ですか？要点だけ教えて", "quick", 3),
@@ -191,8 +200,8 @@ class SkillScriptsTest(unittest.TestCase):
                     {
                         "mode": "standard",
                         "sources": [
-                            {"source": "youtube", "status": "complete", "count": 8, "reason": ""},
-                            {"source": "x", "status": "auth_required", "count": 0, "reason": "Cookie設定が必要"},
+                            {"source": "youtube", "status": "complete", "count": 8, "retrieval_method": "yt-dlp / 字幕", "reason": ""},
+                            {"source": "x", "status": "auth_required", "count": 0, "retrieval_method": "未取得", "reason": "Cookie設定が必要"},
                         ],
                     },
                     ensure_ascii=False,
@@ -209,10 +218,15 @@ class SkillScriptsTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             coverage_text = coverage.read_text(encoding="utf-8")
             self.assertTrue(coverage_text.startswith("## 調査状況（自動選択モード: standard）"))
-            self.assertIn("| X | `auth_required` | 0 | Cookie設定が必要 |", coverage_text)
+            self.assertIn("| X | `auth_required` | 0 | 未取得 | Cookie設定が必要 |", coverage_text)
 
             report = work / "final-report.md"
             report.write_text("## Conclusion\nテスト結果\n", encoding="utf-8")
+            artifacts = work / "youtube" / "abc123"
+            artifacts.mkdir(parents=True)
+            (artifacts / "transcript.json").write_text("[]\n", encoding="utf-8")
+            (artifacts / "chunks.json").write_text("[]\n", encoding="utf-8")
+            (artifacts / "ignored.bin").write_bytes(b"ignored")
             report_dir = work / "reports"
             result = subprocess.run(
                 [
@@ -222,6 +236,8 @@ class SkillScriptsTest(unittest.TestCase):
                     str(report),
                     "--coverage",
                     str(coverage),
+                    "--artifacts-dir",
+                    str(work / "youtube"),
                     "--topic",
                     "AI動画調査",
                     "--report-dir",
@@ -237,6 +253,9 @@ class SkillScriptsTest(unittest.TestCase):
             self.assertEqual(saved_path.parent, report_dir.resolve())
             self.assertTrue(saved_path.exists())
             self.assertTrue(saved_path.read_text(encoding="utf-8").startswith("## 調査状況"))
+            artifacts_path = Path(json.loads(result.stdout)["artifacts_path"])
+            self.assertTrue((artifacts_path / "youtube" / "abc123" / "transcript.json").exists())
+            self.assertFalse((artifacts_path / "youtube" / "abc123" / "ignored.bin").exists())
 
 
 if __name__ == "__main__":

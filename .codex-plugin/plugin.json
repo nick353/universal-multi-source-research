@@ -1,6 +1,6 @@
 {
   "name": "youtube-multi-source-research",
-  "version": "0.1.0+codex.20260728213643",
+  "version": "0.1.0+codex.20260728214720",
   "description": "Turn a topic, question, or URL into a timestamped, cited research brief across every relevant configured platform.",
   "author": {
     "name": "Personal"
@@ -13,6 +13,6 @@
     "developerName": "Personal",
     "category": "Research",
     "capabilities": [],
-    "defaultPrompt": "Use Universal Multi-Source Research to automatically choose research depth, investigate this topic or URL across every relevant configured source, show source coverage first, save the cited brief locally, and report any first-use setup needed."
+    "defaultPrompt": "Use Universal Multi-Source Research to automatically choose research depth, investigate this topic or URL across every relevant configured source, show source coverage first, include script-ready YouTube transcript materials, save the cited brief locally, and report any first-use setup needed."
   }
 }

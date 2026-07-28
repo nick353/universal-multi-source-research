@@ -24,7 +24,7 @@ YouTube is treated as a source family, not one citation. For relevant topics, th
 
 The default depth also requires ordinary Web search, official/news/blog/Q&A/primary pages, GitHub Issues and Discussions, Reddit comments and reply context, plus Japanese, English, synonym, experience, criticism, and counterargument query families. These are part of the standard plan, not optional add-ons.
 
-Every final answer starts with a source coverage table showing each platform's status, item count, and any setup/block reason. Completed reports are also saved by default to `~/Documents/Codex/Universal Research/reports/`.
+Every final answer starts with a source coverage table showing each platform's status, item count, and any setup/block reason. The first screen then gives a short recommendation, a compact comparison, and script-ready YouTube points. Completed reports and available transcript artifacts are saved by default to `~/Documents/Codex/Universal Research/reports/`.
 
 ## Use in Codex App
 

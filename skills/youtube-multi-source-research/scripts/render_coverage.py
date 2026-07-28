@@ -40,7 +40,12 @@ def load_payload(path: Path) -> dict:
 
 def render(payload: dict) -> str:
     mode = payload.get("mode") or payload.get("mode_selection", {}).get("selected") or "standard"
-    lines = [f"## 調査状況（自動選択モード: {mode}）", "", "| 媒体 | 状態 | 取得件数 | 未取得理由 |", "| --- | --- | ---: | --- |"]
+    lines = [
+        f"## 調査状況（自動選択モード: {mode}）",
+        "",
+        "| 媒体 | 状態 | 取得件数 | 取得方法・根拠 | 未取得理由 |",
+        "| --- | --- | ---: | --- | --- |",
+    ]
     for record in payload["sources"]:
         if not isinstance(record, dict):
             raise ValueError("each source record must be an object")
@@ -51,8 +56,9 @@ def render(payload: dict) -> str:
         count = record.get("count", 0)
         if not isinstance(count, int) or count < 0:
             raise ValueError(f"count must be a non-negative integer for {source}")
+        method = str(record.get("retrieval_method") or record.get("evidence_quality") or "—").replace("|", "\\|").replace("\n", " ")
         reason = str(record.get("reason") or "—").replace("|", "\\|").replace("\n", " ")
-        lines.append(f"| {SOURCE_LABELS.get(source, source)} | `{status}` | {count} | {reason} |")
+        lines.append(f"| {SOURCE_LABELS.get(source, source)} | `{status}` | {count} | {method} | {reason} |")
     return "\n".join(lines) + "\n"
 
 
