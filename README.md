@@ -20,7 +20,11 @@ An X post/thread URL or Reddit post/comment/subreddit URL is a valid seed. The S
 
 YouTube is treated as a source family, not one citation. For relevant topics, the default target is 5–10 diverse videos, with a minimum quality target of three distinct videos when coverage exists. It compares channels, dates, transcripts, claims, primary-source citations, repeated content, and counterpoints. If fewer videos or transcripts are available, the final report says so and lowers confidence.
 
+調査の深さはユーザーに選ばせず、依頼内容から自動判定します。短い事実確認は簡易調査、通常のテーマやURLは標準調査、比較・最新情報・評判・実体験・台本作成・複数URLなどは深掘り調査になります。媒体の選択もテーマとURLから自動で行います。
+
 The default depth also requires ordinary Web search, official/news/blog/Q&A/primary pages, GitHub Issues and Discussions, Reddit comments and reply context, plus Japanese, English, synonym, experience, criticism, and counterargument query families. These are part of the standard plan, not optional add-ons.
+
+Every final answer starts with a source coverage table showing each platform's status, item count, and any setup/block reason. The first screen then gives a short recommendation, a compact comparison, and script-ready YouTube points. Completed reports and available transcript artifacts are saved by default to `~/Documents/Codex/Universal Research/reports/`.
 
 ## Use in Codex App
 
@@ -61,6 +65,8 @@ Cookie、APIキー、トークンはチャットに貼らないでください�
 ```text
 Universal Multi-Source Researchで、このテーマを全媒体調査して。
 ```
+
+モードを指定する必要はありません。必要ならURLや「台本用」「直近30日」など目的だけを追加してください。
 
 設定が不足している場合、このSkillは「インストール済みだが、追加設定が必要な媒体」を利用者へ案内します。
 

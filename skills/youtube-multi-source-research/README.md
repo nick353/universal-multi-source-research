@@ -8,6 +8,8 @@ The package slug is `youtube-multi-source-research` for compatibility. The displ
 
 インストール後、初回だけ`agent-reach doctor`を実行してください。YouTube、通常Web、RSS、公開GitHubは環境によってすぐ使えます。XとRedditはログイン状態や読み取り設定が必要な場合があります。Cookie・APIキー・トークンはチャットへ貼らず、利用者のローカル環境だけで設定してください。
 
-The standard plan targets 5–10 YouTube videos, ordinary Web search, official/news/blog/Q&A/primary sources, GitHub Issues/Discussions, Reddit comments, and Japanese/English/synonym/experience/criticism/counterargument query families.
+The skill automatically selects quick, standard, or deep research from the request. It targets 3–5, 5–10, or 8–12 YouTube videos respectively, while keeping platform selection automatic. Standard/deep research includes ordinary Web search, official/news/blog/Q&A/primary sources, GitHub Issues/Discussions, Reddit comments, and Japanese/English/synonym/experience/criticism/counterargument query families.
+
+The final answer starts with a source coverage table containing status, item counts, and reasons for unavailable sources, followed by a short recommendation, compact comparison, and script-ready YouTube/transcript index. Completed reports and available transcript artifacts are saved by default to `~/Documents/Codex/Universal Research/reports/`.
 
 Read `SKILL.md` for the workflow, `references/source-routing.md` for platform and multi-video policy, and `references/evidence-schema.md` before writing evidence records.

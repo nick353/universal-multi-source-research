@@ -86,8 +86,9 @@ class SkillScriptsTest(unittest.TestCase):
             self.assertEqual(plan["seeds"][0]["type"], "youtube")
             sources = {record["source"] for record in plan["sources"]}
             self.assertTrue({"youtube", "x", "reddit", "web", "github"}.issubset(sources))
-            self.assertEqual(plan["youtube_policy"]["minimum_distinct_count"], 3)
-            self.assertEqual(plan["youtube_policy"]["target_count"], 5)
+            self.assertEqual(plan["youtube_policy"]["minimum_distinct_count"], 5)
+            self.assertEqual(plan["mode"], "deep")
+            self.assertEqual(plan["youtube_policy"]["target_count"], 8)
             self.assertTrue(plan["web_policy"]["ordinary_search_required"])
             self.assertTrue(plan["community_policy"]["reddit_comments_required"])
             self.assertTrue(plan["community_policy"]["github_issues_required"])
@@ -154,6 +155,109 @@ class SkillScriptsTest(unittest.TestCase):
         self.assertIn("agent-reach doctor", text)
         self.assertIn("XやReddit", text)
         self.assertIn("Cookie、APIキー、トークンはチャットに貼らない", text)
+
+    def test_report_display_contract_is_present(self):
+        skill_text = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        template_text = (ROOT / "references" / "report-template.md").read_text(encoding="utf-8")
+        self.assertIn("Report display contract", skill_text)
+        self.assertIn("--artifacts-dir work/youtube", skill_text)
+        self.assertIn("あなた向けの判断", template_text)
+        self.assertIn("YouTube字幕・台本素材", template_text)
+        self.assertIn("媒体別の生の声と一次情報", template_text)
+
+    def test_auto_mode_selects_quick_standard_and_deep(self):
+        cases = [
+            ("これは何ですか？要点だけ教えて", "quick", 3),
+            ("Geminiの使い方を調査して", "standard", 5),
+            ("最新のAI動画生成ツールをYouTube、X、Redditで比較して台本用に調査", "deep", 8),
+        ]
+        for question, expected_mode, expected_target in cases:
+            with self.subTest(question=question):
+                with tempfile.TemporaryDirectory() as temp:
+                    output = Path(temp) / "plan.json"
+                    result = subprocess.run(
+                        [sys.executable, str(SCRIPTS / "plan_research.py"), "--question", question, "--out", str(output)],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    plan = json.loads(output.read_text(encoding="utf-8"))
+                    self.assertEqual(plan["mode"], expected_mode)
+                    self.assertTrue(plan["mode_selection"]["automatic"])
+                    self.assertEqual(plan["youtube_policy"]["target_count"], expected_target)
+                    if expected_mode == "quick":
+                        self.assertEqual(len(plan["query_families"]), 5)
+                    else:
+                        self.assertEqual(len(plan["query_families"]), 12)
+
+    def test_coverage_render_and_stable_report_save(self):
+        with tempfile.TemporaryDirectory() as temp:
+            work = Path(temp)
+            status = work / "source-status.json"
+            status.write_text(
+                json.dumps(
+                    {
+                        "mode": "standard",
+                        "sources": [
+                            {"source": "youtube", "status": "complete", "count": 8, "retrieval_method": "yt-dlp / 字幕", "reason": ""},
+                            {"source": "x", "status": "auth_required", "count": 0, "retrieval_method": "未取得", "reason": "Cookie設定が必要"},
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            coverage = work / "coverage.md"
+            result = subprocess.run(
+                [sys.executable, str(SCRIPTS / "render_coverage.py"), "--input", str(status), "--out", str(coverage)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            coverage_text = coverage.read_text(encoding="utf-8")
+            self.assertTrue(coverage_text.startswith("## 調査状況（自動選択モード: standard）"))
+            self.assertIn("| X | `auth_required` | 0 | 未取得 | Cookie設定が必要 |", coverage_text)
+
+            report = work / "final-report.md"
+            report.write_text("## Conclusion\nテスト結果\n", encoding="utf-8")
+            artifacts = work / "youtube" / "abc123"
+            artifacts.mkdir(parents=True)
+            (artifacts / "transcript.json").write_text("[]\n", encoding="utf-8")
+            (artifacts / "chunks.json").write_text("[]\n", encoding="utf-8")
+            (artifacts / "ignored.bin").write_bytes(b"ignored")
+            report_dir = work / "reports"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS / "save_report.py"),
+                    "--input",
+                    str(report),
+                    "--coverage",
+                    str(coverage),
+                    "--artifacts-dir",
+                    str(work / "youtube"),
+                    "--topic",
+                    "AI動画調査",
+                    "--report-dir",
+                    str(report_dir),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            saved = json.loads(result.stdout)["path"]
+            saved_path = Path(saved)
+            self.assertEqual(saved_path.name, "report.md")
+            self.assertEqual(saved_path.parent.parent, report_dir.resolve())
+            self.assertTrue(saved_path.exists())
+            self.assertTrue(saved_path.read_text(encoding="utf-8").startswith("## 調査状況"))
+            artifacts_path = Path(json.loads(result.stdout)["artifacts_path"])
+            self.assertEqual(artifacts_path, saved_path.parent / "artifacts")
+            self.assertTrue((artifacts_path / "youtube" / "abc123" / "transcript.json").exists())
+            self.assertFalse((artifacts_path / "youtube" / "abc123" / "ignored.bin").exists())
 
 
 if __name__ == "__main__":

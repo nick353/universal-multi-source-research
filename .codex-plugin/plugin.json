@@ -1,6 +1,6 @@
 {
   "name": "youtube-multi-source-research",
-  "version": "0.1.0+codex.20260728181841",
+  "version": "0.1.0+codex.20260728214826",
   "description": "Turn a topic, question, or URL into a timestamped, cited research brief across every relevant configured platform.",
   "author": {
     "name": "Personal"
@@ -9,10 +9,10 @@
   "interface": {
     "displayName": "Universal Multi-Source Research",
     "shortDescription": "\u30c6\u30fc\u30de\u30fbURL\u304b\u3089\u5168\u5a92\u4f53\u3092\u6a2a\u65ad\u8abf\u67fb",
-    "longDescription": "Research a topic or URL across every relevant configured source, extract transcripts and claims when relevant, and return a read-only cited brief. On first use, report any local source setup still required.",
+    "longDescription": "Automatically choose quick, standard, or deep research for a topic or URL, collect across every relevant configured source, show source coverage first, save the read-only cited brief locally, and report any local source setup still required.",
     "developerName": "Personal",
     "category": "Research",
     "capabilities": [],
-    "defaultPrompt": "Use Universal Multi-Source Research to investigate this topic or URL across every relevant configured source, report any first-use setup needed, and return a cited brief."
+    "defaultPrompt": "Use Universal Multi-Source Research to automatically choose research depth, investigate this topic or URL across every relevant configured source, show source coverage first, include script-ready YouTube transcript materials, save the cited brief locally, and report any first-use setup needed."
   }
 }
