@@ -32,13 +32,13 @@ def combine(coverage: str, report: str) -> str:
     return report.rstrip() + "\n"
 
 
-def choose_path(directory: Path, topic: str, now: datetime) -> Path:
+def choose_package_path(directory: Path, topic: str, now: datetime) -> Path:
     stamp = now.astimezone().strftime("%Y%m%d-%H%M%S")
-    base = directory / f"{stamp}-{slugify(topic)}.md"
+    base = directory / f"{stamp}-{slugify(topic)}"
     candidate = base
     index = 2
     while candidate.exists():
-        candidate = directory / f"{stamp}-{slugify(topic)}-{index}.md"
+        candidate = directory / f"{stamp}-{slugify(topic)}-{index}"
         index += 1
     return candidate
 
@@ -47,7 +47,7 @@ def copy_transcript_artifacts(source: Path, output: Path) -> Path | None:
     """Copy only transcript-like artifacts and return their destination."""
     if not source.exists() or not source.is_dir():
         return None
-    destination = output.parent / f"{output.stem}-artifacts" / "youtube"
+    destination = output.parent / "artifacts" / "youtube"
     copied = 0
     for item in source.rglob("*"):
         if not item.is_file() or item.suffix.lower() not in SAFE_ARTIFACT_SUFFIXES:
@@ -77,13 +77,19 @@ def main() -> int:
     configured_dir = os.environ.get("UNIVERSAL_RESEARCH_REPORT_DIR")
     directory = Path(args.report_dir or configured_dir or DEFAULT_REPORT_DIR).expanduser()
     directory.mkdir(parents=True, exist_ok=True)
-    output = Path(args.output).expanduser() if args.output else choose_path(directory, args.topic, datetime.now().astimezone())
+    if args.output:
+        output = Path(args.output).expanduser()
+    else:
+        package = choose_package_path(directory, args.topic, datetime.now().astimezone())
+        package.mkdir(parents=True, exist_ok=True)
+        output = package / "report.md"
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(combine(coverage, report), encoding="utf-8")
     artifacts = copy_transcript_artifacts(Path(args.artifacts_dir).expanduser(), output) if args.artifacts_dir else None
     result = {
         "saved": True,
         "path": str(output.resolve()),
+        "package_path": str(output.parent.resolve()),
         "directory": str(output.parent.resolve()),
         "artifacts_path": str(artifacts.resolve()) if artifacts else None,
     }

@@ -1,6 +1,6 @@
 {
   "name": "youtube-multi-source-research",
-  "version": "0.1.0+codex.20260728214720",
+  "version": "0.1.0+codex.20260728214826",
   "description": "Turn a topic, question, or URL into a timestamped, cited research brief across every relevant configured platform.",
   "author": {
     "name": "Personal"

@@ -233,7 +233,7 @@ python3 scripts/save_report.py \
   --topic "調査テーマ"
 ```
 
-The default directory is `~/Documents/Codex/Universal Research/reports/`. When `work/youtube` exists, copy only its transcript/metadata artifacts into a sibling `<report-name>-artifacts/youtube/` directory; never copy cookies, tokens, raw auth files, or unrelated evidence. Preserve the per-video transcript status and relative artifact path in the YouTube index. Respect `UNIVERSAL_RESEARCH_REPORT_DIR` or `--report-dir` when the user has configured another local directory. Report the absolute saved report and artifacts paths in the final answer.
+The default directory is `~/Documents/Codex/Universal Research/reports/`. Create one package directory per run containing `report.md` and, when `work/youtube` exists, `artifacts/youtube/`. Copy only transcript/metadata artifacts; never copy cookies, tokens, raw auth files, or unrelated evidence. Preserve the per-video transcript status and relative artifact path in the YouTube index. Respect `UNIVERSAL_RESEARCH_REPORT_DIR` or `--report-dir` when the user has configured another local directory. Report the absolute saved report and package paths in the final answer.
 
 Say `not corroborated in the searched window` when a claim lacks independent support. Say `the selected sources agree` rather than presenting repeated or copied content as universal truth.
 

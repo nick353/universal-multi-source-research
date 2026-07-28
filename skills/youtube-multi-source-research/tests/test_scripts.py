@@ -250,10 +250,12 @@ class SkillScriptsTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             saved = json.loads(result.stdout)["path"]
             saved_path = Path(saved)
-            self.assertEqual(saved_path.parent, report_dir.resolve())
+            self.assertEqual(saved_path.name, "report.md")
+            self.assertEqual(saved_path.parent.parent, report_dir.resolve())
             self.assertTrue(saved_path.exists())
             self.assertTrue(saved_path.read_text(encoding="utf-8").startswith("## 調査状況"))
             artifacts_path = Path(json.loads(result.stdout)["artifacts_path"])
+            self.assertEqual(artifacts_path, saved_path.parent / "artifacts")
             self.assertTrue((artifacts_path / "youtube" / "abc123" / "transcript.json").exists())
             self.assertFalse((artifacts_path / "youtube" / "abc123" / "ignored.bin").exists())
 
