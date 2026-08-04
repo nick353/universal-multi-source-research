@@ -10,7 +10,7 @@ topic / question / one or more URLs / transcript
   -> claim comparison, first-hand voices, and cited research brief
 ```
 
-このプラグインが主役となって、調査テーマ・質問・URLから取得先を自動選択し、複数媒体の情報をまとめます。媒体接続のための取得ランタイムは内部で利用しますが、利用者は個別の媒体ごとに別のSkillを呼び出す必要はありません。
+このプラグインが主役となって、調査テーマ・質問・URLから取得先を自動選択し、複数媒体の情報をまとめます。媒体接続のための取得ランタイムは内部で利用しますが、利用者は個別の媒体ごとに別のSkillを呼び出す必要はありません。システムの診断・設定・ログイン・成功/失敗通知は英語で表示し、調査レポート本文は日本語を標準にします。
 
 ## What it does
 
@@ -47,10 +47,10 @@ For a single-video-only task, explicitly say “このYouTube動画1本だけを
 
 このプラグインをインストールしただけで、調査の指示・計画・Web/YouTube/GitHub/RSSの基本取得は始められます。ただし、XやRedditのログインが必要な情報は、利用者自身の環境で一度だけ接続設定が必要です。
 
-最初の実行時に、次の確認をしてください。
+最初の実行時は、Skillが内部で英語の診断アダプターを使います。手動で確認する場合は、Skill内の次のスクリプトを実行してください。
 
 ```bash
-agent-reach doctor
+python3 skills/youtube-multi-source-research/scripts/agent_reach_status.py
 ```
 
 表示された媒体の状態に従って設定します。

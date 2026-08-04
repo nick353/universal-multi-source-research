@@ -5,15 +5,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlparse
 from typing import Any, Iterable
 
+from source_contract import VALID_SOURCE_IDS, canonical_source, source_from_url
 
-SOURCES = {"youtube", "x", "reddit", "web", "github", "hacker_news", "tiktok", "other"}
 
+# Compatibility export for callers that used the old normalizer constant.
+SOURCES = set(VALID_SOURCE_IDS)
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -34,30 +36,42 @@ def iter_records(value: Any) -> Iterable[dict[str, Any]]:
 
 
 def infer_source(record: dict[str, Any]) -> str:
-    value = str(record.get("source", record.get("platform", ""))).lower().strip()
-    aliases = {"twitter": "x", "reddit.com": "reddit", "youtube.com": "youtube", "github.com": "github", "hn": "hacker_news"}
-    value = aliases.get(value, value)
-    if value in SOURCES:
-        return value
+    explicit = canonical_source(record.get("source", record.get("platform", "")))
+    if explicit:
+        return explicit
     url = str(record.get("url", record.get("link", "")))
-    host = urlparse(url).netloc.lower()
-    if "youtube" in host or "youtu.be" in host:
-        return "youtube"
-    if "reddit" in host:
-        return "reddit"
-    if host in {"x.com", "twitter.com", "t.co"} or "twitter" in host:
-        return "x"
-    if "github" in host:
-        return "github"
-    return "web"
+    return source_from_url(url) or "web"
 
 
 def as_text(record: dict[str, Any]) -> str:
-    for key in ("text", "body", "content", "description", "snippet", "summary"):
+    # Reddit search exposes the submission body as `selftext`; Reddit read and
+    # X expose it as `text`. Keep both paths so a search result is not reduced
+    # to a title-only citation.
+    for key in ("text", "body", "selftext", "content", "description", "snippet", "summary"):
         value = record.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip()
     return ""
+
+
+def source_url(record: dict[str, Any]) -> Any:
+    return (
+        record.get("url")
+        or record.get("link")
+        or record.get("permalink")
+        or record.get("url_overridden_by_dest")
+    )
+
+
+def published_at(value: Any) -> Any:
+    if isinstance(value, (int, float)):
+        return datetime.fromtimestamp(value, tz=timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return value
+
+
+def topic_terms(topic: str) -> list[str]:
+    terms = re.findall(r"[A-Za-z0-9][A-Za-z0-9_-]{2,}|[一-龯ぁ-んァ-ンー]{2,}", topic.lower())
+    return list(dict.fromkeys(term for term in terms if term not in {"the", "and", "for", "with", "this", "that", "を", "の", "に", "で"}))
 
 
 def engagement(record: dict[str, Any]) -> dict[str, Any]:
@@ -76,7 +90,7 @@ def engagement(record: dict[str, Any]) -> dict[str, Any]:
     return values
 
 
-def normalize(record: dict[str, Any]) -> dict[str, Any]:
+def normalize(record: dict[str, Any], topic: str | None = None) -> dict[str, Any]:
     method = str(record.get("retrieval_method", record.get("method", "manual")))
     confidence = str(record.get("confidence", ""))
     if confidence not in {"high", "medium", "low"}:
@@ -86,11 +100,11 @@ def normalize(record: dict[str, Any]) -> dict[str, Any]:
         claim_ids = [claim_ids]
     if not isinstance(claim_ids, list):
         claim_ids = []
-    return {
+    normalized = {
         "source": infer_source(record),
-        "url": record.get("url", record.get("link")),
+        "url": source_url(record),
         "retrieved_at": record.get("retrieved_at") or now_iso(),
-        "published_at": record.get("published_at", record.get("created_at")),
+        "published_at": published_at(record.get("published_at", record.get("created_at", record.get("created_utc")))),
         "author": record.get("author", record.get("username")),
         "title": record.get("title", record.get("name")),
         "text": as_text(record),
@@ -101,6 +115,18 @@ def normalize(record: dict[str, Any]) -> dict[str, Any]:
         "confidence": confidence,
         "status": record.get("status", "complete"),
     }
+    if topic:
+        terms = topic_terms(topic)
+        haystack = " ".join(str(value or "") for value in (normalized.get("title"), normalized.get("text"))).lower()
+        matched = [term for term in terms if term in haystack]
+        normalized["topic"] = topic
+        normalized["matched_topic_terms"] = matched
+        normalized["topic_match_score"] = round(len(matched) / len(terms), 3) if terms else 0.0
+    if record.get("topic_relevance") is not None:
+        normalized["topic_relevance"] = record.get("topic_relevance")
+    if record.get("relevance_reason") is not None:
+        normalized["relevance_reason"] = record.get("relevance_reason")
+    return normalized
 
 
 def load(path: Path) -> Iterable[dict[str, Any]]:
@@ -116,12 +142,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--topic", help="Topic used to add deterministic term-match metadata.")
     args = parser.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     count = 0
     with args.output.open("w", encoding="utf-8") as handle:
         for record in load(args.input):
-            handle.write(json.dumps(normalize(record), ensure_ascii=False) + "\n")
+            handle.write(json.dumps(normalize(record, args.topic), ensure_ascii=False) + "\n")
             count += 1
     print(json.dumps({"records": count, "output": str(args.output)}, ensure_ascii=False))
     return 0

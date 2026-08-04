@@ -32,7 +32,7 @@ Store one JSON object per line in `evidence.jsonl`. Do not store cookies, tokens
 
 ### `source`
 
-`youtube`, `x`, `reddit`, `web`, `github`, `hacker_news`, `tiktok`, `other`.
+Canonical IDs are `youtube`, `x`, `reddit`, `web`, `github`, `hacker_news`, `rss`, `tiktok`, `instagram`, `bluesky`, `linkedin`, `arxiv`, `polymarket`, `bilibili`, `xiaohongshu`, `facebook`, `v2ex`, `xiaoyuzhou`, and `xueqiu`. The legacy compatibility value `other` is preserved when explicitly supplied. Known host aliases are normalized by `scripts/source_contract.py`; unknown HTTP(S) hosts fall back to `web`.
 
 ### `retrieval_method`
 
