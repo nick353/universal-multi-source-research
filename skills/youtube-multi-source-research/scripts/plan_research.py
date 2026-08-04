@@ -10,9 +10,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
+from source_contract import CORE_SOURCES, OPTIONAL_SOURCES, source_from_url
 
-DEFAULT_SOURCES = ["youtube", "x", "reddit", "web", "github", "hacker_news", "rss"]
-OPTIONAL_SOURCES = ["tiktok", "instagram", "bluesky", "linkedin", "arxiv", "polymarket", "bilibili", "xiaohongshu"]
+DEFAULT_SOURCES = list(CORE_SOURCES)
 MODE_NAMES = ("quick", "standard", "deep")
 QUERY_FAMILIES = [
     {"id": "exact", "label": "exact topic or entity", "suffix": "", "required": True},
@@ -35,6 +35,10 @@ SOURCE_TARGETS = {
     "reddit": ["submissions", "comments", "parent and reply context", "subreddit context", "linked sources"],
     "github": ["repositories", "releases", "Issues", "Discussions", "maintainers", "related repositories"],
     "x": ["posts", "threads", "replies", "quoted posts", "linked sources"],
+    "facebook": ["posts", "pages", "groups", "linked sources"],
+    "v2ex": ["topics", "replies", "node context", "linked sources"],
+    "xiaoyuzhou": ["podcast episodes", "transcripts", "show context", "linked sources"],
+    "xueqiu": ["market data", "community posts", "replies", "linked sources"],
 }
 
 MODE_CONFIG = {
@@ -65,6 +69,80 @@ MODE_CONFIG = {
 }
 
 
+def limit_spec(target: int, minimum: int, maximum: int) -> dict[str, int]:
+    """Describe a soft target, evidence floor, and per-source retrieval cap."""
+    return {"target": target, "min": minimum, "max": maximum}
+
+
+OPTIONAL_COLLECTION_LIMITS = {
+    source: {"items": limit_spec(3, 1, 8)}
+    for source in OPTIONAL_SOURCES
+}
+
+COLLECTION_LIMITS = {
+    "quick": {
+        "youtube": {"items": limit_spec(3, 2, 5)},
+        "web": {"opened_pages": limit_spec(3, 1, 6)},
+    },
+    "standard": {
+        "youtube": {"items": limit_spec(5, 3, 10)},
+        "x": {
+            "primary_posts": limit_spec(10, 5, 20),
+            "replies": limit_spec(20, 10, 40),
+            "quoted_posts": limit_spec(5, 2, 10),
+        },
+        "reddit": {
+            "submissions": limit_spec(5, 3, 10),
+            "comments": limit_spec(20, 10, 40),
+        },
+        "github": {
+            "repositories": limit_spec(3, 1, 6),
+            "issues": limit_spec(6, 2, 12),
+            "discussions": limit_spec(4, 1, 8),
+            "releases": limit_spec(2, 0, 4),
+        },
+        "web": {"opened_pages": limit_spec(12, 8, 15)},
+        "hacker_news": {"discussions": limit_spec(3, 1, 8)},
+        "rss": {"items": limit_spec(6, 2, 12)},
+        **OPTIONAL_COLLECTION_LIMITS,
+    },
+    "deep": {
+        "youtube": {"items": limit_spec(8, 5, 12)},
+        "x": {
+            "primary_posts": limit_spec(20, 10, 40),
+            "replies": limit_spec(40, 20, 80),
+            "quoted_posts": limit_spec(10, 5, 20),
+        },
+        "reddit": {
+            "submissions": limit_spec(10, 5, 20),
+            "comments": limit_spec(40, 20, 80),
+        },
+        "github": {
+            "repositories": limit_spec(6, 2, 12),
+            "issues": limit_spec(12, 4, 24),
+            "discussions": limit_spec(8, 2, 16),
+            "releases": limit_spec(4, 0, 8),
+        },
+        "web": {"opened_pages": limit_spec(20, 12, 25)},
+        "hacker_news": {"discussions": limit_spec(6, 2, 12)},
+        "rss": {"items": limit_spec(10, 4, 20)},
+        **{
+            source: {"items": limit_spec(6, 2, 12)}
+            for source in OPTIONAL_SOURCES
+        },
+    },
+}
+
+
+def active_collection_limits(mode: str, sources: list[str]) -> dict[str, dict[str, dict[str, int]]]:
+    """Return limits for every planned source, including bounded seed-only sources."""
+    configured = COLLECTION_LIMITS[mode]
+    return {
+        source: configured.get(source, {"items": limit_spec(1, 1, 3)})
+        for source in sources
+    }
+
+
 def select_research_mode(question: str, urls: list[str], requested_mode: str = "auto") -> tuple[str, str]:
     """Select a workload automatically without asking the user to choose a mode."""
     if requested_mode in MODE_NAMES:
@@ -89,22 +167,17 @@ def select_research_mode(question: str, urls: list[str], requested_mode: str = "
 
 
 def classify_url(value: str) -> str:
-    host = (urlparse(value).hostname or "").lower()
-    path = (urlparse(value).path or "").lower()
-    if host == "youtu.be" or host == "youtube.com" or host.endswith(".youtube.com"):
-        return "youtube"
-    if host == "x.com" or host.endswith(".x.com") or host == "twitter.com" or host.endswith(".twitter.com"):
-        return "x"
-    if host == "reddit.com" or host.endswith(".reddit.com") or host == "redd.it" or host.endswith(".redd.it"):
-        return "reddit"
-    if host == "github.com" or host.endswith(".github.com"):
-        return "github"
-    if path.endswith(".pdf"):
+    parsed = urlparse(value if "://" in value else "//" + value)
+    path = (parsed.path or "").lower()
+    source = source_from_url(value)
+    if source == "web" and path.endswith(".pdf"):
         return "web_pdf"
+    if source:
+        return source
     return "web"
 
 
-def source_expansion(seed_type: str) -> list[str]:
+def source_expansion(seed_type: str, mode: str = "standard") -> list[str]:
     expansions = {
         "youtube": ["youtube", "x", "reddit", "web", "github"],
         "x": ["x", "reddit", "youtube", "web", "github"],
@@ -113,6 +186,20 @@ def source_expansion(seed_type: str) -> list[str]:
         "web": ["web", "x", "reddit", "youtube", "github"],
         "web_pdf": ["web", "x", "reddit", "youtube", "github"],
     }
+    quick_expansions = {
+        "youtube": ["youtube", "web"],
+        "x": ["x", "web", "youtube"],
+        "reddit": ["reddit", "web", "youtube"],
+        "github": ["github", "web", "youtube"],
+        "web": ["web", "youtube"],
+        "web_pdf": ["web", "youtube"],
+    }
+    if mode == "quick":
+        if seed_type in OPTIONAL_SOURCES:
+            return [seed_type, "web", "youtube"]
+        return quick_expansions.get(seed_type, ["web", "youtube"])
+    if seed_type in OPTIONAL_SOURCES:
+        return [seed_type, "x", "reddit", "youtube", "web", "github"]
     return expansions.get(seed_type, DEFAULT_SOURCES[:])
 
 
@@ -160,16 +247,30 @@ def build_plan(question: str, urls: list[str], window_days: int, requested_mode:
     seeds = [{"url": url, "type": classify_url(url)} for url in urls]
     sources = list(mode_config["sources"])
     for seed in seeds:
-        for source in source_expansion(seed["type"]):
+        for source in source_expansion(seed["type"], mode):
             if source not in sources:
                 sources.append(source)
-    broad_request = bool(re.search(r"全プラットフォーム|全媒体|すべて|全部|万能|all platforms|every platform", question, re.I))
-    if broad_request:
+    optional_candidates = []
+    if mode in {"standard", "deep"}:
         sources.extend(source for source in OPTIONAL_SOURCES if source not in sources)
+        optional_candidates = [source for source in OPTIONAL_SOURCES if source in sources]
+    source_roles = {
+        source: "core" if source in CORE_SOURCES else "optional_candidate"
+        for source in sources
+    }
+    collection_limits = active_collection_limits(mode, sources)
+    youtube_focused = bool(
+        any(seed["type"] == "youtube" for seed in seeds)
+        or re.search(r"youtube|ユーチューブ", question, re.I)
+    )
+    non_youtube_sources = [source for source in sources if source != "youtube"]
+    corroboration_required = mode in {"standard", "deep"} and youtube_focused
     source_records = [
         {
             "source": source,
             "status": "planned",
+            "selection_role": source_roles[source],
+            "collection_limits": collection_limits[source],
             "retrieval_role": {
                 "web": "ordinary web search plus opening official pages, news, blogs, Q&A, and primary sources",
                 "youtube": "multiple diverse videos, captions/transcripts, metadata, and related claims",
@@ -178,6 +279,10 @@ def build_plan(question: str, urls: list[str], window_days: int, requested_mode:
                 "github": "repositories, releases, issues, discussions, and maintainers",
                 "hacker_news": "technical discussions and linked primary sources",
                 "rss": "recent feeds and source discovery",
+                "facebook": "posts, pages, groups, and linked sources",
+                "v2ex": "topics, replies, node context, and linked sources",
+                "xiaoyuzhou": "podcast episodes, transcripts, and linked sources",
+                "xueqiu": "market data, community posts, replies, and linked sources",
             }.get(source, "relevant configured platform search and source retrieval"),
             "collection_targets": (
                 [
@@ -204,12 +309,28 @@ def build_plan(question: str, urls: list[str], window_days: int, requested_mode:
         "queries": make_queries(question, urls, families),
         "query_families": query_family_plan(families),
         "sources": source_records,
+        "collection_limits": collection_limits,
         "mode": mode,
         "mode_selection": {
             "requested": requested_mode,
             "selected": mode,
             "automatic": requested_mode == "auto",
             "reason": mode_reason,
+        },
+        "source_selection": {
+            "core_sources": list(CORE_SOURCES),
+            "optional_candidates": optional_candidates,
+            "optional_candidates_included_by_default": mode in {"standard", "deep"},
+            "all_platform_wording_required": False,
+            "seed_expansion": "mode-bounded; Quick keeps only seed plus YouTube/Web corroboration",
+        },
+        "source_balance": {
+            "core_source_count": len([source for source in sources if source in CORE_SOURCES]),
+            "optional_candidate_count": len(optional_candidates),
+            "youtube_focused": youtube_focused,
+            "non_youtube_corroboration_required": corroboration_required,
+            "minimum_non_youtube_corroboration": 1 if corroboration_required else 0,
+            "non_youtube_sources": non_youtube_sources,
         },
         "youtube_policy": {
             "target_count": mode_config["youtube_target"],

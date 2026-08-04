@@ -23,7 +23,11 @@ SOURCE_LABELS = {
     "arxiv": "arXiv",
     "polymarket": "Polymarket",
     "bilibili": "Bilibili",
-    "xiaohongshu": "小红書",
+    "xiaohongshu": "Xiaohongshu",
+    "facebook": "Facebook",
+    "v2ex": "V2EX",
+    "xiaoyuzhou": "Xiaoyuzhou",
+    "xueqiu": "Xueqiu",
 }
 ALLOWED_STATUSES = {"complete", "partial", "auth_required", "blocked", "no_results", "not_configured", "error", "planned"}
 
@@ -53,7 +57,9 @@ def render(payload: dict) -> str:
         status = str(record.get("status", "error"))
         if status not in ALLOWED_STATUSES:
             raise ValueError(f"unsupported source status: {status}")
-        count = record.get("count", 0)
+        # When relevance review has run, display only retained topic evidence;
+        # raw search-hit counts must not inflate coverage.
+        count = record.get("relevant_count", record.get("count", 0))
         if not isinstance(count, int) or count < 0:
             raise ValueError(f"count must be a non-negative integer for {source}")
         method = str(record.get("retrieval_method") or record.get("evidence_quality") or "—").replace("|", "\\|").replace("\n", " ")

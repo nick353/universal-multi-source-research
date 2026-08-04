@@ -1,6 +1,6 @@
 ---
 name: youtube-multi-source-research
-description: "Research a topic, question, one or more URLs, or an existing transcript across every relevant configured platform, including multiple YouTube videos, X, Reddit, Web, GitHub, Hacker News, RSS, and optional sources. Extract and compare transcripts, claims, reactions, and first-hand experiences into a cited cross-source brief. Use when the user says research, investigate, fact-check, compare, summarize the discussion, or asks to search all platforms."
+description: "Research a topic, question, one or more URLs, or an existing transcript across every relevant configured platform, including multiple YouTube videos, X, Reddit, Web, GitHub, Hacker News, RSS, and optional sources. Perform live read-only retrieval, preserve source-native URLs, validate evidence before claiming completion, and extract and compare transcripts, claims, reactions, and first-hand experiences into a cited cross-source brief. Invoke automatically, without requiring the user to say use a skill, when the user asks to リサーチして、調査して、調べて、検索して、探して、比較して、検証して、評判・口コミ・体験談・問題点・最新情報を調べる, or equivalent research in English, especially when multiple sources or community evidence are relevant. Do not use for purely local file/code inspection or when browsing is explicitly excluded."
 ---
 
 # Universal Multi-Source Research
@@ -25,8 +25,12 @@ If a platform or adapter is unavailable, record its status and continue; never r
 Do not ask the user to choose a mode. Run `scripts/plan_research.py` with its default `--mode auto` and use the selected mode in the plan and report.
 
 - **Quick**: short factual checks, definitions, “要点だけ”, or an explicitly single-video request. Target 3–5 YouTube videos and a smaller query set; add community sources when the seed or wording makes them relevant.
-- **Standard**: the default for a normal topic or URL investigation. Search the core configured set and target 5–10 diverse YouTube videos.
-- **Deep**: automatically choose for comparisons, multiple URLs, “最新/評判/実体験/問題点/台本/徹底”, broad cross-platform requests, or long/complex questions. Target 8–12 YouTube videos and keep all core query families.
+- **Standard**: the default for a normal topic or URL investigation. Search the core configured set, include the optional sources as candidates, and target 5–10 diverse YouTube videos.
+- **Deep**: automatically choose for comparisons, multiple URLs, “最新/評判/実体験/問題点/台本/徹底”, broad cross-platform requests, or long/complex questions. Target 8–12 YouTube videos, include optional sources as candidates, and keep all core query families.
+
+Quick remains narrow: optional sources are not added by wording or by an ordinary seed expansion. Standard and Deep record `source_selection` and `source_balance`; when focused on YouTube they require non-YouTube corroboration. A `planned` source is only a plan entry and must never be reported as retrieved evidence.
+
+Standard and Deep also record source-specific `collection_limits` with `target`, `min`, and `max` values. X is counted separately as primary posts, replies, and quoted posts; Reddit separates submissions and comments; GitHub separates repositories, Issues, Discussions, and releases; Web counts opened deduplicated pages. Report shortfalls instead of silently accepting a smaller sample.
 
 Source selection remains automatic inside the selected mode. A seed URL always forces its own platform and required corroboration sources into the plan. If the user explicitly requests a mode, honor it; otherwise never expose a mode-selection question.
 
@@ -44,13 +48,21 @@ Write the final brief in Japanese unless the user requests another language. Opt
 
 Keep comparison-table cells short. Move long explanations to the sections below. Always distinguish a direct capture from a downstream researcher report and a source author's opinion from a verified fact.
 
+## System language
+
+Keep system and operational messages in English, including setup instructions, health checks, authentication state, success messages (`Login successful.`), failure messages, and saved-report confirmations. Preserve stable status codes and source IDs exactly as received from adapters.
+
+Keep the research brief in Japanese by default unless the user requests English. Do not expose upstream Agent-Reach locale text in the final answer.
+
 ## First-run setup and user guidance
 
-Before a live external research run, check the available acquisition runtime when it is installed:
+Before a live external research run, check the available acquisition runtime when it is installed. Use the bundled English adapter so upstream locale text is not shown:
 
 ```bash
-agent-reach doctor --json
+python3 scripts/agent_reach_status.py --json
 ```
+
+The adapter calls `agent-reach doctor --json`, preserves machine-readable status fields, and translates only the display boundary. Do not modify the installed Agent-Reach package to change its hard-coded messages; package updates would overwrite that change.
 
 If a required command or source is missing, tell the user in this form before continuing:
 
@@ -61,6 +73,7 @@ Use the source status from the diagnostic output. Do not ask the user to paste c
 ## Operating contract
 
 - Treat “調査して”, “リサーチして”, “全媒体で”, “比較して”, and equivalent requests as permission to search all relevant configured sources without requiring the user to name each platform.
+- Do not treat `active_backend: null` alone as source unavailability. If the health check says an OpenCLI bridge is connected or explicit credentials are configured, classify the source as `configured_unverified`, run one documented read-only smoke command, and use it when that command succeeds. On failure, preserve the exact `auth_required`, `blocked`, or `error` status; never silently omit the source or call it `no_results`.
 - Default to read-only. Do not post, reply, vote, follow, subscribe, purchase, upload, or modify external content.
 - Never put API keys, OAuth secrets, passwords, cookies, or bearer tokens into transcripts, evidence JSON, reports, prompts, commits, or logs.
 - Preserve seed URLs, query plans, retrieval times, original source links, transcript type, timestamps, and source status.
@@ -69,11 +82,64 @@ Use the source status from the diagnostic output. Do not ask the user to paste c
 - Engagement is a relevance signal, not proof of truth. Search ranking is not evidence quality.
 - Do not claim to search “the entire internet.” Say which configured sources were searched, which were unavailable, and what the coverage window was.
 
+## Non-negotiable live retrieval gate
+
+The plan, `agent-reach doctor`, a connector list, a search snippet, or a statement that a source is configured is not retrieval evidence. A research run is only complete after it has live source-native results and a source-status packet that passes validation.
+
+For Standard and Deep runs, always run the following read-only probe for X and Reddit when they are in the plan. Use the same query family and the same configured backend for substantive collection:
+
+```bash
+python3 scripts/live_source_probe.py \
+  --source x --source reddit \
+  --query "主要な調査語" \
+  --out work/live-source-probe.json
+```
+
+The probe must return source-native URLs and a positive count for a source to be called `complete`. It is an admission check, not the final evidence: open relevant X posts/threads and Reddit submissions/comments, preserve their direct URLs, and record their retrieval method in the evidence ledger. Do not replace those steps with only the probe output.
+
+### Topic and content relevance gate
+
+Search results are candidates, not evidence. Search ranking, a matching title, or a single shared word is not enough. For every retained X/Reddit/Web/GitHub item, open the source record and capture its actual body/text (X `text`; Reddit search `selftext`; Reddit read `text`), direct URL, author/date, and the claim or experience it supports. Mark each candidate `topic_relevance` as `relevant`, `partial`, or `irrelevant` and add a short `relevance_reason`. Exclude `irrelevant` items from source counts and conclusions. Never create source content from a title or search snippet.
+
+Normalize with topic metadata so the ledger makes the content check visible:
+
+```bash
+python3 scripts/normalize_evidence.py \
+  --input work/raw-evidence.jsonl \
+  --output work/evidence.jsonl \
+  --topic "調査テーマ"
+```
+
+Then require at least two reviewed, body-bearing, relevant records per required community source:
+
+```bash
+python3 scripts/validate_topic_evidence.py \
+  --input work/evidence.jsonl \
+  --topic "調査テーマ" \
+  --keyword "主要エンティティ" --keyword "主要な問題・機能" \
+  --require-source x --require-source reddit \
+  --min-relevant 2 \
+  --out work/topic-validation.json
+```
+
+If this validator fails, label the result `research_incomplete` or `partial`; do not count noisy search hits as topic evidence. For Reddit, keep the search result URL when `reddit read` omits a URL from the returned comment/body records, and associate the opened body with that parent URL explicitly.
+
+Before rendering or saving a report, make the source-status packet include `count`, `status`, `reason`, `retrieval_method`, and `evidence_urls`, then run:
+
+```bash
+python3 scripts/validate_research_evidence.py \
+  --input work/source-status.json \
+  --require-source x --require-source reddit \
+  --out work/research-validation.json
+```
+
+If the validator fails, label the run `research_incomplete`, show the exact source blocker (`auth_required`, `blocked`, `no_results`, `not_configured`, or `error`), and do not write or describe a completed cross-platform brief. Continue with available sources only as a clearly partial report. A `planned` source is never evidence. If the task is running in a background/automation session and there is no actual research turn or tool output, apply the same rule: report `research_incomplete` instead of implying that research occurred.
+
 ## Input modes
 
 ### Topic or question only
 
-When the user gives no URL, infer the entities, products, people, dates, handles, subreddits, repositories, and disputed terms in the question. Create the mandatory query families from the default research depth: original wording, Japanese, English, synonyms/related terms, exact names, official/primary source, news, implementation/tutorial, experience/review, criticism/limitations, and counterargument/alternative view. Route the plan to YouTube, X, Reddit, ordinary Web search and page reading, GitHub, Hacker News, and RSS by default; add configured optional sources such as TikTok, Instagram, Bluesky, LinkedIn, arXiv, Polymarket, Bilibili, or Xiaohongshu when they are relevant and available.
+When the user gives no URL, infer the entities, products, people, dates, handles, subreddits, repositories, and disputed terms in the question. Create the mandatory query families from the default research depth: original wording, Japanese, English, synonyms/related terms, exact names, official/primary source, news, implementation/tutorial, experience/review, criticism/limitations, and counterargument/alternative view. Route the plan to YouTube, X, Reddit, ordinary Web search and page reading, GitHub, Hacker News, and RSS by default; add configured optional sources such as TikTok, Instagram, Bluesky, LinkedIn, arXiv, Polymarket, Bilibili, Xiaohongshu, Facebook, V2EX, Xiaoyuzhou, or Xueqiu when they are relevant and available.
 
 When YouTube is relevant, search for multiple candidate videos rather than selecting the first result. Prefer a diverse set: independent creators, official/primary channels, specialist explainers, recent updates, and credible counterpoints. Deduplicate near-identical reposts and cap the set using the selected automatic mode, source health, relevance, date, and diversity available in the active adapter.
 
@@ -108,6 +174,9 @@ Create a working packet containing:
 - language variants, normally Japanese and English when relevant;
 - query families: exact, Japanese, English, synonym/related, official/primary, news, implementation, experience, criticism/limitations, and counterargument;
 - source list, collection targets, expected result count, and source status;
+- `source_selection` metadata for core sources, optional candidates, and bounded seed expansion;
+- `source_balance` metadata, including the non-YouTube corroboration requirement for YouTube-focused Standard/Deep plans;
+- `collection_limits` metadata with per-source target, minimum, and maximum counts;
 - the automatically selected mode and the reason for selecting it;
 - whether the user wants facts, opinions, reactions, implementation evidence, market sentiment, or first-hand experiences.
 
@@ -121,7 +190,7 @@ python3 scripts/plan_research.py \
   --out work/research-plan.json
 ```
 
-Read [references/source-routing.md](references/source-routing.md) to adjust source selection and YouTube diversity for the topic. Do not silently omit a source because it is harder to access; mark its status and continue with the available sources.
+Read [references/source-routing.md](references/source-routing.md) and `scripts/source_contract.py` to adjust source selection, canonical identities, host aliases, and YouTube diversity for the topic. Do not silently omit a source because it is harder to access; mark its status and continue with the available sources.
 
 ### 2. Check source health and select adapters
 
@@ -135,6 +204,8 @@ Use the current installed contracts rather than inventing undocumented command s
 | YouTube fallback | `yt-dlp` plus bundled normalizer | Multiple candidate video metadata/captions when the active access layer exposes them |
 
 Agent-Reach is an access layer, not proof that a source is complete. last30days-skill is a discovery/synthesis layer, not a substitute for opening primary URLs. PRAW is only for Reddit and never posts. Follow each installed upstream Skill's current `SKILL.md` and report unavailable routes.
+
+For OpenCLI-backed read-only collection, pass `--window background --site-session persistent` by default. Persistent sessions intentionally keep and reuse the site's browser container, preventing each X/Reddit command from creating another visible `about:blank` Chrome window. Do not request ephemeral tab cleanup for this lane, and do not run parallel foreground OpenCLI sessions unless the user explicitly asks to watch the browser; X and Reddit remain separate authenticated site contexts internally.
 
 ### 3. Collect multiple YouTube videos when relevant
 
@@ -195,7 +266,8 @@ Convert adapter outputs to [references/evidence-schema.md](references/evidence-s
 ```bash
 python3 scripts/normalize_evidence.py \
   --input work/raw-evidence.jsonl \
-  --output work/evidence.jsonl
+  --output work/evidence.jsonl \
+  --topic "調査テーマ"
 ```
 
 At minimum preserve `source`, `url`, `published_at`, `retrieved_at`, `author`, `title`, `text`, `quote`, `engagement`, `claim_ids`, `retrieval_method`, `source_role`, and `confidence`. Keep source status and error details in the ledger; do not turn an auth failure into `no_results`.
