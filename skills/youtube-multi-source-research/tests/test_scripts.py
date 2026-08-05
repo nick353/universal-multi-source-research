@@ -153,6 +153,59 @@ class SkillScriptsTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(len(json.loads(chunks.read_text(encoding="utf-8"))), 1)
 
+    def test_url_transcript_prefers_captions_and_falls_back_per_language(self):
+        with tempfile.TemporaryDirectory() as temp:
+            work = Path(temp)
+            fake_ytdlp = work / "yt-dlp"
+            fake_ytdlp.write_text(
+                "#!/usr/bin/env python3\n"
+                "import pathlib, sys\n"
+                "args = sys.argv\n"
+                "language = args[args.index('--sub-langs') + 1]\n"
+                "if language == 'ja':\n"
+                "    raise SystemExit(1)\n"
+                "output = args[args.index('--output') + 1]\n"
+                "path = pathlib.Path(output.replace('%(id)s', 'abc123').replace('%(ext)s', language + '.vtt'))\n"
+                "path.parent.mkdir(parents=True, exist_ok=True)\n"
+                "path.write_text('WEBVTT\\n\\n00:00:01.000 --> 00:00:03.000\\nFallback subtitle.\\n', encoding='utf-8')\n",
+                encoding="utf-8",
+            )
+            fake_ytdlp.chmod(0o755)
+            agent_marker = work / "agent-reach-called"
+            fake_agent = work / "agent-reach"
+            fake_agent.write_text(
+                "#!/usr/bin/env python3\n"
+                f"import pathlib\npathlib.Path({str(agent_marker)!r}).write_text('called', encoding='utf-8')\n"
+                "raise SystemExit(1)\n",
+                encoding="utf-8",
+            )
+            fake_agent.chmod(0o755)
+            output = work / "transcript"
+            env = os.environ.copy()
+            env["PATH"] = f"{work}:{env['PATH']}"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS / "extract_transcript.py"),
+                    "https://www.youtube.com/watch?v=abc123",
+                    "--out", str(output),
+                    "--lang", "ja", "en",
+                    "--backend", "auto",
+                    "--timeout", "5",
+                ],
+                capture_output=True,
+                text=True,
+                env=env,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["language"], "en")
+            self.assertEqual(manifest["retrieval_method"], "yt_dlp")
+            self.assertFalse(agent_marker.exists(), result.stderr)
+            transcript = json.loads((output / "transcript.json").read_text(encoding="utf-8"))
+            self.assertEqual(transcript[0]["text"], "Fallback subtitle.")
+
     def test_evidence_normalization(self):
         with tempfile.TemporaryDirectory() as temp:
             work = Path(temp)

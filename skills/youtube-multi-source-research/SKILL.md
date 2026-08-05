@@ -209,7 +209,7 @@ Use the current installed contracts rather than inventing undocumented command s
 | Access and routing | Agent-Reach | YouTube subtitles/transcription, public GitHub, Web, and configured X/Reddit routes; run `agent-reach doctor` when available |
 | Cross-source discovery and synthesis | last30days-skill | Recent discovery, engagement-aware ranking, cross-source clusters, and cited synthesis across its supported platforms |
 | Reddit precision | PRAW | Repeatable read-only submissions/comments, scores, timestamps, subreddit filters, and exact API collection |
-| YouTube fallback | `yt-dlp` plus bundled normalizer | Multiple candidate video metadata/captions when the active access layer exposes them |
+| YouTube fallback | `yt-dlp` plus bundled normalizer | Direct subtitle/caption retrieval first; Agent-Reach transcription only when explicitly selected or audio fallback is authorized |
 
 Agent-Reach is an access layer, not proof that a source is complete. last30days-skill is a discovery/synthesis layer, not a substitute for opening primary URLs. PRAW is only for Reddit and never posts. Follow each installed upstream Skill's current `SKILL.md` and report unavailable routes.
 
@@ -233,7 +233,7 @@ python3 scripts/extract_transcript.py \
   --out work/youtube/VIDEO_ID --lang ja en
 ```
 
-The URL helper tries `agent-reach transcribe`, then `yt-dlp` subtitles. Audio download plus `faster-whisper` requires an explicit `--allow-audio` decision. Never silently download audio. Run the helper separately for each selected video and keep one manifest per video.
+The URL helper tries `yt-dlp` subtitles first, one requested language at a time, then English fallbacks (`en`, `en-US`, `en-GB`). A rate limit or missing track in one language must not prevent the next language attempt. `agent-reach transcribe` is an ASR/audio route and runs only when `--backend agent-reach` is explicitly selected or `--allow-audio` is supplied. Audio download plus `faster-whisper` requires the explicit `--allow-audio` decision. The helper applies one overall URL timeout, not a fresh full timeout for every backend/language attempt. Never silently download audio. Run the helper separately for each selected video and keep one manifest per video.
 
 Do not reduce the YouTube result to a few transcript snippets. Build a per-video transcript index with `full`, `partial`, or `unavailable` status, transcript type/language, key timestamps, and the relative artifact path. Preserve the complete normalized transcript as a local artifact when available; summarize it in the chat instead of dumping the full text into the final response.
 

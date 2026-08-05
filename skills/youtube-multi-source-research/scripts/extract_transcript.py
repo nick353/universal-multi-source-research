@@ -14,7 +14,7 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -134,6 +134,79 @@ def run_command(command: list[str], timeout: int) -> subprocess.CompletedProcess
     return subprocess.run(command, text=True, capture_output=True, timeout=timeout, check=False)
 
 
+def remaining_timeout(deadline: float) -> int:
+    return max(0, int(deadline - time.monotonic()))
+
+
+def subtitle_languages(preferred: list[str]) -> list[str]:
+    """Return ordered single-language attempts with reliable English fallbacks."""
+    values = list(preferred or [])
+    for fallback in ("en", "en-US", "en-GB"):
+        if fallback not in values:
+            values.append(fallback)
+    return list(dict.fromkeys(values))
+
+
+def fetch_yt_dlp_subtitles(
+    yt_dlp: str,
+    args: argparse.Namespace,
+    raw_dir: Path,
+    errors: list[str],
+    deadline: float,
+) -> tuple[list[dict[str, Any]], dict[str, Any]] | None:
+    """Try each subtitle language independently so one 429 does not abort the video."""
+    subtitle_pattern = str(raw_dir / "%(id)s.%(ext)s")
+    for language in subtitle_languages(args.lang):
+        timeout = remaining_timeout(deadline)
+        if timeout <= 0:
+            errors.append("yt-dlp subtitle extraction timed out before the next language attempt")
+            break
+        before = set(raw_dir.glob("*"))
+        socket_timeout = str(max(5, min(timeout, 30)))
+        command = [
+            yt_dlp,
+            "--no-playlist",
+            "--skip-download",
+            "--write-subs",
+            "--write-auto-subs",
+            "--sub-langs",
+            language,
+            "--sub-format",
+            "vtt/srt",
+            "--socket-timeout",
+            socket_timeout,
+            "--output",
+            subtitle_pattern,
+            args.url,
+        ]
+        try:
+            result = run_command(command, timeout)
+            created = set(raw_dir.glob("*")) - before
+            subtitle_files = sorted(
+                path for path in created
+                if path.suffix.lower() in {".vtt", ".srt"} and f".{language}." in path.name
+            )
+            if subtitle_files:
+                chosen = subtitle_files[0]
+                segments, input_kind = parse_input(chosen)
+                if segments:
+                    return segments, {
+                        "source": "youtube",
+                        "url": args.url,
+                        "retrieved_at": now_iso(),
+                        "language": language,
+                        "transcript_type": "manual_or_generated",
+                        "retrieval_method": "yt_dlp",
+                        "input_kind": input_kind,
+                        "raw_file": str(chosen.relative_to(args.out)),
+                        "status": "complete",
+                    }
+            errors.append(f"yt-dlp subtitle extraction failed ({language}): exit={result.returncode}")
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            errors.append(f"yt-dlp error ({language}): {type(exc).__name__}")
+    return None
+
+
 def save_transcript(out_dir: Path, segments: list[dict[str, Any]], manifest: dict[str, Any]) -> None:
     if not segments:
         raise ValueError("No transcript segments were found")
@@ -159,84 +232,61 @@ def fetch_url(args: argparse.Namespace, out_dir: Path) -> tuple[list[dict[str, A
     raw_dir = out_dir / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
     errors: list[str] = []
-
-    agent_reach = shutil.which("agent-reach")
-    if args.backend in {"auto", "agent-reach"} and agent_reach:
-        try:
-            result = run_command([agent_reach, "transcribe", args.url], args.timeout)
-            if result.returncode == 0 and result.stdout.strip():
-                output = result.stdout.strip()
-                try:
-                    segments = parse_json_transcript(json.loads(output))
-                    input_kind = "json"
-                except json.JSONDecodeError:
-                    segments = [{"text": clean_text(output), "start": 0.0, "duration": 0.0}]
-                    input_kind = "text"
-                if segments:
-                    return segments, {
-                        "source": "youtube",
-                        "url": args.url,
-                        "retrieved_at": now_iso(),
-                        "language": args.lang[0] if args.lang else None,
-                        "transcript_type": "asr_or_backend",
-                        "retrieval_method": "agent_reach",
-                        "input_kind": input_kind,
-                        "status": "complete",
-                    }
-            errors.append(f"agent-reach failed: exit={result.returncode}")
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            errors.append(f"agent-reach error: {type(exc).__name__}")
-    elif args.backend == "agent-reach":
-        errors.append("agent-reach is not installed")
+    deadline = time.monotonic() + max(1, args.timeout)
 
     yt_dlp = shutil.which("yt-dlp")
+    agent_reach = shutil.which("agent-reach")
+    # Prefer native subtitle retrieval in auto mode. It is faster, does not need
+    # an ASR credential, and keeps the user's read-only/no-audio contract.
     if args.backend in {"auto", "yt-dlp"} and yt_dlp:
-        subtitle_pattern = str(raw_dir / "%(id)s.%(ext)s")
-        langs = ",".join(args.lang) if args.lang else ".*"
-        command = [
-            yt_dlp,
-            "--skip-download",
-            "--write-subs",
-            "--write-auto-subs",
-            "--sub-langs",
-            langs,
-            "--sub-format",
-            "vtt/srt",
-            "--output",
-            subtitle_pattern,
-            args.url,
-        ]
-        try:
-            result = run_command(command, args.timeout)
-            subtitle_files = sorted(raw_dir.glob("*.vtt")) + sorted(raw_dir.glob("*.srt"))
-            if result.returncode == 0 and subtitle_files:
-                chosen = subtitle_files[0]
-                segments, input_kind = parse_input(chosen)
-                if segments:
-                    return segments, {
-                        "source": "youtube",
-                        "url": args.url,
-                        "retrieved_at": now_iso(),
-                        "language": args.lang[0] if args.lang else None,
-                        "transcript_type": "manual_or_generated",
-                        "retrieval_method": "yt_dlp",
-                        "input_kind": input_kind,
-                        "raw_file": str(chosen.relative_to(out_dir)),
-                        "status": "complete",
-                    }
-            errors.append(f"yt-dlp subtitle extraction failed: exit={result.returncode}")
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            errors.append(f"yt-dlp error: {type(exc).__name__}")
+        result = fetch_yt_dlp_subtitles(yt_dlp, args, raw_dir, errors, deadline)
+        if result:
+            return result
     elif args.backend == "yt-dlp":
         errors.append("yt-dlp is not installed")
+
+    # Agent-Reach transcribe is an ASR/audio route. Keep it explicit unless the
+    # caller has opted into audio fallback, so auto mode cannot silently fetch audio.
+    if args.backend == "agent-reach" or (args.backend == "auto" and args.allow_audio):
+        if not agent_reach:
+            errors.append("agent-reach is not installed")
+        elif (timeout := remaining_timeout(deadline)) <= 0:
+            errors.append("agent-reach skipped because the overall timeout expired")
+        else:
+            try:
+                result = run_command([agent_reach, "transcribe", args.url], timeout)
+                if result.returncode == 0 and result.stdout.strip():
+                    output = result.stdout.strip()
+                    try:
+                        segments = parse_json_transcript(json.loads(output))
+                        input_kind = "json"
+                    except json.JSONDecodeError:
+                        segments = [{"text": clean_text(output), "start": 0.0, "duration": 0.0}]
+                        input_kind = "text"
+                    if segments:
+                        return segments, {
+                            "source": "youtube",
+                            "url": args.url,
+                            "retrieved_at": now_iso(),
+                            "language": args.lang[0] if args.lang else None,
+                            "transcript_type": "asr_or_backend",
+                            "retrieval_method": "agent_reach",
+                            "input_kind": input_kind,
+                            "status": "complete",
+                        }
+                errors.append(f"agent-reach failed: exit={result.returncode}")
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                errors.append(f"agent-reach error: {type(exc).__name__}")
 
     if args.allow_audio:
         if not yt_dlp:
             errors.append("audio fallback requires yt-dlp")
+        elif (timeout := remaining_timeout(deadline)) <= 0:
+            errors.append("audio fallback skipped because the overall timeout expired")
         else:
             audio_pattern = str(raw_dir / "audio.%(ext)s")
             try:
-                result = run_command([yt_dlp, "-x", "--audio-format", "wav", "--output", audio_pattern, args.url], args.timeout)
+                result = run_command([yt_dlp, "-x", "--audio-format", "wav", "--output", audio_pattern, args.url], timeout)
                 audio_files = list(raw_dir.glob("audio.*"))
                 if result.returncode == 0 and audio_files:
                     try:
@@ -278,7 +328,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model", default="small", help="faster-whisper model when --allow-audio is used")
     parser.add_argument("--device", default="cpu", choices=["cpu", "cuda"], help="faster-whisper device")
     parser.add_argument("--compute-type", default="int8", help="faster-whisper compute type")
-    parser.add_argument("--timeout", type=int, default=900, help="Per-command timeout in seconds")
+    parser.add_argument("--timeout", type=int, default=120, help="Overall URL fetch timeout in seconds")
     return parser
 
 
