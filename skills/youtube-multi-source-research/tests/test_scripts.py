@@ -510,6 +510,79 @@ class SkillScriptsTest(unittest.TestCase):
             self.assertTrue(any(blocker["code"] == "planned_not_retrieved" for blocker in invalid["blockers"]))
             self.assertTrue(any(blocker["code"] == "required_source_missing" for blocker in invalid["blockers"]))
 
+    def test_youtube_candidates_do_not_count_as_usable_evidence(self):
+        with tempfile.TemporaryDirectory() as temp:
+            work = Path(temp)
+            packet = work / "source-status.json"
+            packet.write_text(
+                json.dumps({
+                    "sources": [{
+                        "source": "youtube",
+                        "status": "partial",
+                        "count": 5,
+                        "evidence_urls": ["https://www.youtube.com/watch?v=one"],
+                        "reason": "字幕取得がタイムアウト",
+                    }]
+                }),
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                [sys.executable, str(SCRIPTS / "validate_research_evidence.py"), "--input", str(packet), "--require-source", "youtube"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 1)
+            invalid = json.loads(result.stdout)
+            self.assertTrue(any(item["code"] == "youtube_usable_count_missing" for item in invalid["blockers"]))
+
+            packet.write_text(
+                json.dumps({
+                    "sources": [{
+                        "source": "youtube",
+                        "status": "partial",
+                        "count": 5,
+                        "usable_count": 0,
+                        "evidence_urls": ["https://www.youtube.com/watch?v=one"],
+                        "reason": "字幕取得がタイムアウト",
+                    }]
+                }),
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                [sys.executable, str(SCRIPTS / "validate_research_evidence.py"), "--input", str(packet), "--require-source", "youtube"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 1)
+            invalid = json.loads(result.stdout)
+            self.assertTrue(any(item["code"] == "youtube_usable_evidence_missing" for item in invalid["blockers"]))
+
+            packet.write_text(
+                json.dumps({
+                    "sources": [{
+                        "source": "youtube",
+                        "status": "partial",
+                        "count": 5,
+                        "usable_count": 2,
+                        "evidence_urls": [
+                            "https://www.youtube.com/watch?v=one",
+                            "https://www.youtube.com/watch?v=two",
+                        ],
+                        "reason": "一部字幕のみ取得",
+                    }]
+                }),
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                [sys.executable, str(SCRIPTS / "validate_research_evidence.py"), "--input", str(packet), "--require-source", "youtube"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout)
+
     def test_auto_mode_selects_quick_standard_and_deep(self):
         cases = [
             ("これは何ですか？要点だけ教えて", "quick", 3),

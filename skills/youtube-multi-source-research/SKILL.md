@@ -97,6 +97,14 @@ python3 scripts/live_source_probe.py \
 
 The probe must return source-native URLs and a positive count for a source to be called `complete`. It is an admission check, not the final evidence: open relevant X posts/threads and Reddit submissions/comments, preserve their direct URLs, and record their retrieval method in the evidence ledger. Do not replace those steps with only the probe output.
 
+### YouTube candidate-versus-evidence gate
+
+YouTube candidate search is discovery only. A result title, watch URL, channel, view count, or a list of five search hits never counts as usable YouTube evidence by itself. For every selected video, write a transcript/metadata record with the direct URL, retrieval method, transcript status (`full`, `partial`, or `unavailable`), and at least one body-bearing claim or verified metadata field. The source-status record must include both `count` (candidates) and an explicit `usable_count` (videos with usable transcript/metadata evidence), plus `evidence_urls` and the exact shortfall reason. Never infer `usable_count` from `count`.
+
+日本語で言えば、YouTubeは「候補検索だけでは証拠にならない」という扱いです。
+
+When YouTube is in the Standard/Deep plan, pass `--require-source youtube` to `validate_research_evidence.py` together with the required community sources. The validator fails when `usable_count` is absent or zero, even if candidate URLs exist. A partial YouTube source with a positive `usable_count` may be reported as partial, but it must preserve the missing-video reason and must not be described as full coverage.
+
 ### Topic and content relevance gate
 
 Search results are candidates, not evidence. Search ranking, a matching title, or a single shared word is not enough. For every retained X/Reddit/Web/GitHub item, open the source record and capture its actual body/text (X `text`; Reddit search `selftext`; Reddit read `text`), direct URL, author/date, and the claim or experience it supports. Mark each candidate `topic_relevance` as `relevant`, `partial`, or `irrelevant` and add a short `relevance_reason`. Exclude `irrelevant` items from source counts and conclusions. Never create source content from a title or search snippet.
@@ -129,11 +137,11 @@ Before rendering or saving a report, make the source-status packet include `coun
 ```bash
 python3 scripts/validate_research_evidence.py \
   --input work/source-status.json \
-  --require-source x --require-source reddit \
+  --require-source x --require-source reddit --require-source youtube \
   --out work/research-validation.json
 ```
 
-If the validator fails, label the run `research_incomplete`, show the exact source blocker (`auth_required`, `blocked`, `no_results`, `not_configured`, or `error`), and do not write or describe a completed cross-platform brief. Continue with available sources only as a clearly partial report. A `planned` source is never evidence. If the task is running in a background/automation session and there is no actual research turn or tool output, apply the same rule: report `research_incomplete` instead of implying that research occurred.
+If the validator fails, label the run `research_incomplete`, show the exact source blocker (`auth_required`, `blocked`, `no_results`, `not_configured`, `error`, or `youtube_usable_evidence_missing`), and do not write or describe a completed cross-platform brief. Continue with available sources only as a clearly partial report. A `planned` source is never evidence. If the task is running in a background/automation session and there is no actual research turn or tool output, apply the same rule: report `research_incomplete` instead of implying that research occurred.
 
 ## Input modes
 
