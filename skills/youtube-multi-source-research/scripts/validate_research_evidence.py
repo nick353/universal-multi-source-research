@@ -26,6 +26,14 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def _youtube_usable_count(record: dict[str, Any]) -> int | None:
+    """Return an explicit usable-video count; never infer it from candidates."""
+    value = record.get("usable_count")
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
+
+
 def validate(payload: dict[str, Any], required_sources: list[str]) -> dict[str, Any]:
     blockers: list[dict[str, str]] = []
     records = payload.get("sources")
@@ -54,6 +62,12 @@ def validate(payload: dict[str, Any], required_sources: list[str]) -> dict[str, 
             blockers.append({"code": "invalid_evidence_urls", "message": f"{source} evidence_urls must be an array."})
         if status == "complete" and (not isinstance(count, int) or count <= 0 or not urls):
             blockers.append({"code": "complete_without_evidence", "message": f"{source} is complete without a positive count and source URL evidence."})
+        if source == "youtube":
+            usable_count = _youtube_usable_count(record)
+            if usable_count is None:
+                blockers.append({"code": "youtube_usable_count_missing", "message": "YouTube must declare usable_count; candidate videos are not transcript evidence."})
+            elif status == "complete" and usable_count <= 0:
+                blockers.append({"code": "youtube_complete_without_usable_evidence", "message": "YouTube cannot be complete when usable_count is zero."})
         if status == "planned":
             blockers.append({"code": "planned_not_retrieved", "message": f"{source} is only planned, not retrieved."})
 
@@ -68,6 +82,12 @@ def validate(payload: dict[str, Any], required_sources: list[str]) -> dict[str, 
             blockers.append({"code": "required_source_not_retrieved", "message": f"Required source {source} is {status or 'unknown'}, so this run is incomplete."})
         elif not urls:
             blockers.append({"code": "required_source_without_urls", "message": f"Required source {source} has no source-native evidence URLs."})
+        if source == "youtube":
+            usable_count = _youtube_usable_count(record)
+            if usable_count is None:
+                blockers.append({"code": "youtube_usable_count_missing", "message": "Required YouTube source has no explicit usable transcript/metadata evidence count."})
+            elif usable_count <= 0:
+                blockers.append({"code": "youtube_usable_evidence_missing", "message": "Required YouTube source has candidate URLs but no usable transcript/metadata evidence."})
 
     return {
         "valid": not blockers,
