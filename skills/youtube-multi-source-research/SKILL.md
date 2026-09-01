@@ -11,24 +11,24 @@ The package slug remains `youtube-multi-source-research` for backwards compatibi
 
 ## Default research depth
 
-Unless the user narrows the scope, make these four layers mandatory:
+Unless the user explicitly narrows the scope to particular media, make these four media mandatory on every ordinary research run:
 
 1. **Multiple YouTube videos:** target 5–10 usable, non-duplicate videos; prefer different channels and include official/primary, specialist, independent experience, recent update, and counterpoint perspectives when available.
 2. **Ordinary Web search:** search and open official sites, primary documentation, news, blogs, Q&A, and source pages; do not rely only on a cross-source aggregator or search snippets.
-3. **Community and implementation evidence:** inspect GitHub Issues and Discussions, repository/release context, Reddit submissions and comments, parent/reply context, and linked sources when the topic is relevant.
+3. **Community evidence:** inspect X posts/threads and replies, Reddit submissions/comments and parent/reply context. GitHub Issues and Discussions, repository/release context, and linked sources are additional implementation evidence when relevant.
 4. **Query diversity:** run Japanese and English variants, synonyms/related terms, exact-entity queries, implementation/experience queries, and criticism/limitation/counterargument queries. Keep the query families in the research plan.
 
-If a platform or adapter is unavailable, record its status and continue; never reduce the target count silently or call unavailable coverage `no_results`.
+If a required platform or adapter is unavailable, record the exact status and continue collecting only for a clearly partial run. Never reduce the target count silently, call unavailable coverage `no_results`, or return/save that run as `complete`.
 
 ## Automatic research mode
 
 Do not ask the user to choose a mode. Run `scripts/plan_research.py` with its default `--mode auto` and use the selected mode in the plan and report.
 
-- **Quick**: short factual checks, definitions, “要点だけ”, or an explicitly single-video request. Target 3–5 YouTube videos and a smaller query set; add community sources when the seed or wording makes them relevant.
+- **Quick**: short factual checks, definitions, “要点だけ”, or an explicitly single-video request. Target 3–5 YouTube videos and a smaller query set, but still run the bounded X/Reddit live gate and collect the minimum community evidence floor.
 - **Standard**: the default for a normal topic or URL investigation. Search the core configured set, include the optional sources as candidates, and target 5–10 diverse YouTube videos.
 - **Deep**: automatically choose for comparisons, multiple URLs, “最新/評判/実体験/問題点/台本/徹底”, broad cross-platform requests, or long/complex questions. Target 8–12 YouTube videos, include optional sources as candidates, and keep all core query families.
 
-Quick remains narrow: optional sources are not added by wording or by an ordinary seed expansion. Standard and Deep record `source_selection` and `source_balance`; when focused on YouTube they require non-YouTube corroboration. A `planned` source is only a plan entry and must never be reported as retrieved evidence.
+Quick remains bounded by smaller collection limits, but the non-narrowed completion set is still exactly YouTube, X, Reddit, and ordinary Web. Standard and Deep record `source_selection` and `source_balance`; when focused on YouTube they require non-YouTube corroboration. A `planned` source is only a plan entry and must never be reported as retrieved evidence.
 
 Standard and Deep also record source-specific `collection_limits` with `target`, `min`, and `max` values. X is counted separately as primary posts, replies, and quoted posts; Reddit separates submissions and comments; GitHub separates repositories, Issues, Discussions, and releases; Web counts opened deduplicated pages. Report shortfalls instead of silently accepting a smaller sample.
 
@@ -86,7 +86,17 @@ Use the source status from the diagnostic output. Do not ask the user to paste c
 
 The plan, `agent-reach doctor`, a connector list, a search snippet, or a statement that a source is configured is not retrieval evidence. A research run is only complete after it has live source-native results and a source-status packet that passes validation.
 
-For Standard and Deep runs, always run the following read-only probe for X and Reddit when they are in the plan. Use the same query family and the same configured backend for substantive collection:
+For every non-narrowed research run, including Quick, run the bundled admission gate below before substantive collection. Use the same query family and the same configured backend for the actual X/Reddit collection:
+
+```bash
+python3 scripts/research_gate.py \
+  --query "主要な調査語" \
+  --out work/research-gate.json
+```
+
+The gate must return source-native URLs and pass `validate_research_evidence.py` for both X and Reddit. A ready gate is only an admission check: still open relevant posts/threads and Reddit submissions/comments, preserve their direct URLs, and record their retrieval method in the evidence ledger. If the gate fails, preserve the exact blocker and continue only as an explicitly `research_incomplete`/partial run; do not claim completed cross-platform coverage. The final four-media gate below remains mandatory even when this admission gate is ready.
+
+The underlying read-only probe can also be run directly for diagnostics:
 
 ```bash
 python3 scripts/live_source_probe.py \
@@ -97,13 +107,15 @@ python3 scripts/live_source_probe.py \
 
 The probe must return source-native URLs and a positive count for a source to be called `complete`. It is an admission check, not the final evidence: open relevant X posts/threads and Reddit submissions/comments, preserve their direct URLs, and record their retrieval method in the evidence ledger. Do not replace those steps with only the probe output.
 
+The probe tries the configured OpenCLI adapter once and, only after a read-only failure, one installed platform-specific fallback (`twitter-cli` for X or `rdt-cli` for Reddit). For `twitter-cli`, it passes Agent-Reach's stored `auth_token`/`ct0` only through the child process environment; it never writes or logs those values. It records `configured`, `smoke_attempted`, `smoke_result`, `fallback_attempted`, and `evidence_retrieved` for each source. A fallback attempt is not a success claim; the source still needs native URLs and validator approval.
+
 ### YouTube candidate-versus-evidence gate
 
 YouTube candidate search is discovery only. A result title, watch URL, channel, view count, or a list of five search hits never counts as usable YouTube evidence by itself. For every selected video, write a transcript/metadata record with the direct URL, retrieval method, transcript status (`full`, `partial`, or `unavailable`), and at least one body-bearing claim or verified metadata field. The source-status record must include both `count` (candidates) and an explicit `usable_count` (videos with usable transcript/metadata evidence), plus `evidence_urls` and the exact shortfall reason. Never infer `usable_count` from `count`.
 
 日本語で言えば、YouTubeは「候補検索だけでは証拠にならない」という扱いです。
 
-When YouTube is in the Standard/Deep plan, pass `--require-source youtube` to `validate_research_evidence.py` together with the required community sources. The validator fails when `usable_count` is absent or zero, even if candidate URLs exist. A partial YouTube source with a positive `usable_count` may be reported as partial, but it must preserve the missing-video reason and must not be described as full coverage.
+When YouTube is in any non-narrowed plan, the final four-media validator below checks `usable_count`. It fails when `usable_count` is absent or zero, even if candidate URLs exist. A partial YouTube source with a positive `usable_count` may be reported as partial, but it must preserve the missing-video reason and must not be described as full coverage.
 
 ### Topic and content relevance gate
 
@@ -132,16 +144,20 @@ python3 scripts/validate_topic_evidence.py \
 
 If this validator fails, label the result `research_incomplete` or `partial`; do not count noisy search hits as topic evidence. For Reddit, keep the search result URL when `reddit read` omits a URL from the returned comment/body records, and associate the opened body with that parent URL explicitly.
 
-Before rendering or saving a report, make the source-status packet include `count`, `status`, `reason`, `retrieval_method`, and `evidence_urls`, then run:
+### Fixed four-media completion gate
+
+For every ordinary run without an explicit media limitation, completion means the fixed set `[youtube, x, reddit, web]` has passed one final, fail-closed contract. Each record must prove all of the following: a dedicated runner was executed (`runner_executed: true`), it reached terminal success (`terminal_success: true`), evidence was actually retrieved (`evidence_retrieved: true`), the record has a non-empty `retrieval_method`, a positive evidence count, and valid source-native URLs. YouTube additionally requires a positive `usable_count` backed by transcript or verified metadata evidence. X and Reddit require body-bearing post/comment records. Web requires at least one body-bearing opened page; a Web search result, URL candidate, or a Web page mentioning another platform never fulfills that platform.
+
+Before rendering or saving a report, make the source-status packet include `count`, `status`, `reason`, `retrieval_method`, `evidence_urls`, `runner_executed`, `terminal_success`, `evidence_retrieved`, and the applicable `usable_count`/body-evidence count, then run:
 
 ```bash
 python3 scripts/validate_research_evidence.py \
   --input work/source-status.json \
-  --require-source x --require-source reddit --require-source youtube \
+  --require-core-4 \
   --out work/research-validation.json
 ```
 
-If the validator fails, label the run `research_incomplete`, show the exact source blocker (`auth_required`, `blocked`, `no_results`, `not_configured`, `error`, or `youtube_usable_evidence_missing`), and do not write or describe a completed cross-platform brief. Continue with available sources only as a clearly partial report. A `planned` source is never evidence. If the task is running in a background/automation session and there is no actual research turn or tool output, apply the same rule: report `research_incomplete` instead of implying that research occurred.
+The validator emits the immutable contract name `core4_strict_v1` and blockers in the fixed source order. If it fails, label the run `research_incomplete`, show the exact source/stage/reason blocker (`auth_required`, `blocked`, `no_results`, `not_configured`, `error`, `runner_not_executed`, `terminal_failure`, `no_valid_evidence`, or `invalid_provenance`), and do not write or describe a completed cross-platform brief. A partial report may be written only when explicitly requested and must use the partial-save path; it is never a successful research completion. A `planned` source is never evidence. If the task is running in a background/automation session and there is no actual research turn or tool output, apply the same rule: report `research_incomplete` instead of implying that research occurred.
 
 ## Input modes
 
@@ -310,8 +326,11 @@ python3 scripts/save_report.py \
   --input work/final-report.md \
   --coverage work/coverage.md \
   --artifacts-dir work/youtube \
+  --validation work/research-validation.json \
   --topic "調査テーマ"
 ```
+
+`save_report.py` refuses to save a completed report unless the validation JSON is valid. Use `--allow-partial` only when the report is explicitly labeled `research_incomplete` or `partial` and includes the exact source blocker.
 
 The default directory is `~/Documents/Codex/Universal Research/reports/`. Create one package directory per run containing `report.md` and, when `work/youtube` exists, `artifacts/youtube/`. Copy only transcript/metadata artifacts; never copy cookies, tokens, raw auth files, or unrelated evidence. Preserve the per-video transcript status and relative artifact path in the YouTube index. Respect `UNIVERSAL_RESEARCH_REPORT_DIR` or `--report-dir` when the user has configured another local directory. Report the absolute saved report and package paths in the final answer.
 

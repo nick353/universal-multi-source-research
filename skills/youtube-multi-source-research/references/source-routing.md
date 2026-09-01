@@ -12,7 +12,7 @@ Here `web` explicitly includes ordinary search-engine discovery plus opening the
 
 The default depth is mandatory: target 5–10 diverse YouTube videos, perform ordinary Web search, inspect Reddit comments and GitHub Issues/Discussions, and run Japanese, English, synonym/related-term, experience, criticism, and counterargument query families. Lower the target only when the source returns fewer usable items and report the shortfall.
 
-Standard and Deep plans include the optional identities as candidate sources even when the wording does not say “all platforms”. They remain candidates, not retrieval proof; an unavailable candidate must remain visible as `not_configured`, `blocked`, or another applicable status. Quick remains limited to YouTube and Web unless a seed requires its own source and the bounded YouTube/Web corroboration.
+Standard and Deep plans include the optional identities as candidate sources even when the wording does not say “all platforms”. They remain candidates, not retrieval proof; an unavailable candidate must remain visible as `not_configured`, `blocked`, or another applicable status. Quick uses smaller caps, but X and Reddit remain required community sources unless the user explicitly narrows them out; the live gate still runs before collection.
 
 The current optional candidates are `tiktok`, `instagram`, `bluesky`, `linkedin`, `arxiv`, `polymarket`, `bilibili`, `xiaohongshu`, `facebook`, `v2ex`, `xiaoyuzhou`, and `xueqiu`. Do not add a platform by guessing from an unknown host.
 
@@ -32,6 +32,8 @@ Standard and Deep plans expose numeric `collection_limits` in addition to the qu
 | Opened Web pages | 12 / 8 / 15 | 20 / 12 / 25 |
 | Hacker News discussions / RSS items | 3 / 1 / 8; 6 / 2 / 12 | 6 / 2 / 12; 10 / 4 / 20 |
 | Optional candidate items | 3 / 1 / 8 | 6 / 2 / 12 |
+
+Quick community floor: X primary posts target 2 / min 2 / max 5 and Reddit submissions target 2 / min 2 / max 5. Replies/comments are sampled up to 5 each when available. A failed live gate is `research_incomplete`, not zero results.
 
 Counts are role-specific: X replies and quoted posts are not mixed into primary-post counts, Reddit comments retain parent/reply context, and Web counts opened deduplicated pages rather than search-result snippets.
 

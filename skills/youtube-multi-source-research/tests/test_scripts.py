@@ -24,6 +24,124 @@ class SkillScriptsTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             return json.loads(output.read_text(encoding="utf-8"))
 
+    def core4_packet(self, missing: str | None = None) -> dict:
+        records = [
+            {
+                "source": "youtube",
+                "status": "complete",
+                "count": 3,
+                "usable_count": 2,
+                "evidence_urls": ["https://www.youtube.com/watch?v=one"],
+                "retrieval_method": "yt-dlp transcript",
+                "runner_executed": True,
+                "terminal_success": True,
+                "evidence_retrieved": True,
+            },
+            {
+                "source": "x",
+                "status": "complete",
+                "count": 4,
+                "content_records": 4,
+                "body_evidence_count": 4,
+                "evidence_urls": ["https://x.com/example/status/one"],
+                "retrieval_method": "read-only X runner",
+                "runner_executed": True,
+                "terminal_success": True,
+                "evidence_retrieved": True,
+            },
+            {
+                "source": "reddit",
+                "status": "complete",
+                "count": 4,
+                "content_records": 4,
+                "body_evidence_count": 4,
+                "evidence_urls": ["https://www.reddit.com/r/example/comments/one/thread/"],
+                "retrieval_method": "read-only Reddit runner",
+                "runner_executed": True,
+                "terminal_success": True,
+                "evidence_retrieved": True,
+            },
+            {
+                "source": "web",
+                "status": "complete",
+                "count": 4,
+                "content_records": 4,
+                "body_evidence_count": 4,
+                "evidence_urls": ["https://example.com/article"],
+                "retrieval_method": "ordinary Web page reader",
+                "runner_executed": True,
+                "terminal_success": True,
+                "evidence_retrieved": True,
+            },
+        ]
+        return {"sources": [record for record in records if record["source"] != missing]}
+
+    def test_core4_validator_requires_each_media_and_terminal_proof(self):
+        with tempfile.TemporaryDirectory() as temp:
+            work = Path(temp)
+            packet = work / "core4.json"
+            packet.write_text(json.dumps(self.core4_packet()), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS / "validate_research_evidence.py"),
+                    "--input", str(packet),
+                    "--require-core-4",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout)
+            valid = json.loads(result.stdout)
+            self.assertTrue(valid["valid"])
+            self.assertEqual(valid["completion_contract"], "core4_strict_v1")
+            self.assertEqual(valid["required_sources"], ["youtube", "x", "reddit", "web"])
+
+            for missing in ("youtube", "x", "reddit", "web"):
+                packet.write_text(json.dumps(self.core4_packet(missing)), encoding="utf-8")
+                result = subprocess.run(
+                    [
+                        sys.executable,
+                        str(SCRIPTS / "validate_research_evidence.py"),
+                        "--input", str(packet),
+                        "--require-core-4",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 1, missing)
+                invalid = json.loads(result.stdout)
+                self.assertTrue(invalid["research_incomplete"])
+                self.assertTrue(any(
+                    blocker.get("source") == missing
+                    and blocker.get("code") == "required_source_unsatisfied"
+                    for blocker in invalid["blockers"]
+                ))
+
+            packet.write_text(json.dumps(self.core4_packet()), encoding="utf-8")
+            payload = json.loads(packet.read_text(encoding="utf-8"))
+            next(record for record in payload["sources"] if record["source"] == "x")["status"] = "partial"
+            packet.write_text(json.dumps(payload), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS / "validate_research_evidence.py"),
+                    "--input", str(packet),
+                    "--require-core-4",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertTrue(any(
+                blocker.get("source") == "x"
+                and blocker.get("reason") == "terminal_failure"
+                for blocker in json.loads(result.stdout)["blockers"]
+            ))
+
     def test_standard_includes_optional_candidates_without_all_platform_wording(self):
         plan = self.run_plan("--question", "Geminiの使い方を調査して")
         self.assertEqual(plan["mode"], "standard")
@@ -56,10 +174,12 @@ class SkillScriptsTest(unittest.TestCase):
             "--question", "この動画の要点だけ",
         )
         self.assertEqual(plan["mode"], "quick")
-        self.assertEqual([record["source"] for record in plan["sources"]], ["youtube", "web"])
+        self.assertEqual([record["source"] for record in plan["sources"]], ["youtube", "x", "reddit", "web"])
         self.assertEqual(plan["source_selection"]["optional_candidates"], [])
         self.assertFalse(plan["source_selection"]["optional_candidates_included_by_default"])
-        self.assertEqual(set(plan["collection_limits"]), {"youtube", "web"})
+        self.assertEqual(set(plan["collection_limits"]), {"youtube", "x", "reddit", "web"})
+        self.assertEqual(plan["collection_limits"]["x"]["primary_posts"], {"target": 2, "min": 2, "max": 5})
+        self.assertEqual(plan["collection_limits"]["reddit"]["submissions"], {"target": 2, "min": 2, "max": 5})
 
     def test_optional_seed_forces_its_source_with_bounded_quick_expansion(self):
         plan = self.run_plan(
@@ -68,7 +188,7 @@ class SkillScriptsTest(unittest.TestCase):
             "--question", "この投稿の要点だけ",
         )
         self.assertEqual(plan["seeds"][0]["type"], "v2ex")
-        self.assertEqual([record["source"] for record in plan["sources"]], ["youtube", "web", "v2ex"])
+        self.assertEqual([record["source"] for record in plan["sources"]], ["youtube", "x", "reddit", "web", "v2ex"])
 
     def test_canonical_source_identity_preserves_explicit_valid_values(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -523,6 +643,11 @@ class SkillScriptsTest(unittest.TestCase):
             self.assertTrue(all(record["content_records"] == 1 for record in packet["sources"]))
             self.assertTrue(all(record["topic_match_candidates"] == 1 for record in packet["sources"]))
             self.assertTrue(all(record["evidence_urls"] for record in packet["sources"]))
+            self.assertTrue(all(record["configured"] for record in packet["sources"]))
+            self.assertTrue(all(record["smoke_attempted"] for record in packet["sources"]))
+            self.assertTrue(all(record["smoke_result"] == "complete" for record in packet["sources"]))
+            self.assertTrue(all(record["evidence_retrieved"] for record in packet["sources"]))
+            self.assertTrue(all(record["fallback_attempted"] is False for record in packet["sources"]))
             self.assertEqual(packet["browser_policy"], {"window": "background", "site_session": "persistent", "keep_tab": True})
             self.assertNotIn("text", probe.read_text(encoding="utf-8"))
 
@@ -562,6 +687,48 @@ class SkillScriptsTest(unittest.TestCase):
             self.assertTrue(invalid["research_incomplete"])
             self.assertTrue(any(blocker["code"] == "planned_not_retrieved" for blocker in invalid["blockers"]))
             self.assertTrue(any(blocker["code"] == "required_source_missing" for blocker in invalid["blockers"]))
+
+    def test_live_source_probe_uses_read_only_x_fallback_after_primary_failure(self):
+        with tempfile.TemporaryDirectory() as temp:
+            work = Path(temp)
+            primary = work / "opencli"
+            primary.write_text("#!/usr/bin/python3\nraise SystemExit(1)\n", encoding="utf-8")
+            primary.chmod(0o755)
+            fallback = work / "twitter"
+            fallback.write_text(
+                "#!/usr/bin/python3\n"
+                "import json, os, sys\n"
+                "if os.environ.get('TWITTER_AUTH_TOKEN') != 'test-token' or os.environ.get('TWITTER_CT0') != 'test-ct0': sys.exit(2)\n"
+                "print(json.dumps({'tweets': [{'url': 'https://x.com/example/status/456', 'text': 'Codex Desktop automation'}]}))\n",
+                encoding="utf-8",
+            )
+            fallback.chmod(0o755)
+            probe = work / "probe.json"
+            env = os.environ.copy()
+            env["PATH"] = f"{work}{os.pathsep}{env.get('PATH', '')}"
+            env["TWITTER_AUTH_TOKEN"] = "test-token"
+            env["TWITTER_CT0"] = "test-ct0"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS / "live_source_probe.py"),
+                    "--source", "x",
+                    "--query", "Codex Desktop automation",
+                    "--command", str(primary),
+                    "--out", str(probe),
+                ],
+                capture_output=True,
+                text=True,
+                env=env,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            record = json.loads(probe.read_text(encoding="utf-8"))["sources"][0]
+            self.assertEqual(record["status"], "complete")
+            self.assertEqual(record["backend"], "twitter-cli")
+            self.assertTrue(record["fallback_attempted"])
+            self.assertEqual([item["status"] for item in record["attempts"]], ["error", "complete"])
+            self.assertTrue(record["evidence_retrieved"])
 
     def test_youtube_candidates_do_not_count_as_usable_evidence(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -636,6 +803,81 @@ class SkillScriptsTest(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stdout)
 
+    def test_research_gate_fail_closes_when_x_or_reddit_has_no_live_evidence(self):
+        with tempfile.TemporaryDirectory() as temp:
+            work = Path(temp)
+            fake = work / "opencli"
+            fake.write_text("#!/usr/bin/python3\nprint('[]')\n", encoding="utf-8")
+            fake.chmod(0o755)
+            gate = work / "research-gate.json"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS / "research_gate.py"),
+                    "--query", "Codex Desktop automation",
+                    "--command", str(fake),
+                    "--timeout", "2",
+                    "--out", str(gate),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 1)
+            packet = json.loads(gate.read_text(encoding="utf-8"))
+            self.assertEqual(packet["status"], "research_incomplete")
+            self.assertEqual([record["status"] for record in packet["sources"]], ["no_results", "no_results"])
+            self.assertTrue(packet["validation"]["research_incomplete"])
+
+    def test_save_report_refuses_invalid_validation_without_partial_flag(self):
+        with tempfile.TemporaryDirectory() as temp:
+            work = Path(temp)
+            report = work / "report.md"
+            report.write_text("# Incomplete\n", encoding="utf-8")
+            validation = work / "validation.json"
+            validation.write_text(json.dumps({"valid": False, "research_incomplete": True}), encoding="utf-8")
+            output = work / "reports" / "report.md"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS / "save_report.py"),
+                    "--input", str(report),
+                    "--topic", "invalid",
+                    "--validation", str(validation),
+                    "--output", str(output),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertFalse(output.exists())
+            self.assertTrue(json.loads(result.stdout)["research_incomplete"])
+
+    def test_save_report_refuses_legacy_validation_as_complete(self):
+        with tempfile.TemporaryDirectory() as temp:
+            work = Path(temp)
+            report = work / "report.md"
+            report.write_text("# Legacy\n", encoding="utf-8")
+            validation = work / "validation.json"
+            validation.write_text(json.dumps({"valid": True, "research_incomplete": False}), encoding="utf-8")
+            output = work / "reports" / "report.md"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS / "save_report.py"),
+                    "--input", str(report),
+                    "--topic", "legacy",
+                    "--validation", str(validation),
+                    "--output", str(output),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertFalse(output.exists())
+
     def test_auto_mode_selects_quick_standard_and_deep(self):
         cases = [
             ("これは何ですか？要点だけ教えて", "quick", 3),
@@ -658,7 +900,11 @@ class SkillScriptsTest(unittest.TestCase):
                     self.assertTrue(plan["mode_selection"]["automatic"])
                     self.assertEqual(plan["youtube_policy"]["target_count"], expected_target)
                     if expected_mode == "quick":
-                        self.assertEqual(len(plan["query_families"]), 5)
+                        self.assertEqual(len(plan["query_families"]), 6)
+                        self.assertEqual(
+                            [record["source"] for record in plan["sources"][:4]],
+                            ["youtube", "x", "reddit", "web"],
+                        )
                     else:
                         self.assertEqual(len(plan["query_families"]), 12)
 
@@ -671,8 +917,10 @@ class SkillScriptsTest(unittest.TestCase):
                     {
                         "mode": "standard",
                         "sources": [
-                            {"source": "youtube", "status": "complete", "count": 8, "relevant_count": 3, "retrieval_method": "yt-dlp / 字幕", "reason": ""},
-                            {"source": "x", "status": "auth_required", "count": 0, "retrieval_method": "未取得", "reason": "Cookie設定が必要"},
+                            {"source": "youtube", "status": "complete", "count": 8, "usable_count": 3, "relevant_count": 3, "evidence_urls": ["https://www.youtube.com/watch?v=one"], "retrieval_method": "yt-dlp / 字幕", "reason": ""},
+                            {"source": "x", "status": "complete", "count": 2, "relevant_count": 2, "evidence_urls": ["https://x.com/example/status/1", "https://x.com/example/status/2"], "retrieval_method": "OpenCLI read-only search", "reason": ""},
+                            {"source": "reddit", "status": "complete", "count": 2, "relevant_count": 2, "evidence_urls": ["https://www.reddit.com/r/codex/comments/one/example/", "https://www.reddit.com/r/codex/comments/two/example/"], "retrieval_method": "OpenCLI read-only search", "reason": ""},
+                            {"source": "web", "status": "complete", "count": 2, "relevant_count": 2, "evidence_urls": ["https://example.com/article"], "retrieval_method": "ordinary Web page reader", "reason": ""},
                         ],
                     },
                     ensure_ascii=False,
@@ -690,7 +938,17 @@ class SkillScriptsTest(unittest.TestCase):
             coverage_text = coverage.read_text(encoding="utf-8")
             self.assertTrue(coverage_text.startswith("## 調査状況（自動選択モード: standard）"))
             self.assertIn("| YouTube | `complete` | 3 |", coverage_text)
-            self.assertIn("| X | `auth_required` | 0 | 未取得 | Cookie設定が必要 |", coverage_text)
+            self.assertIn("| X | `complete` | 2 |", coverage_text)
+            validation = work / "research-validation.json"
+            validation.write_text(
+                json.dumps({
+                    "valid": True,
+                    "research_incomplete": False,
+                    "completion_contract": "core4_strict_v1",
+                    "required_sources": ["youtube", "x", "reddit", "web"],
+                }),
+                encoding="utf-8",
+            )
 
             report = work / "final-report.md"
             report.write_text("## Conclusion\nテスト結果\n", encoding="utf-8")
@@ -710,6 +968,8 @@ class SkillScriptsTest(unittest.TestCase):
                     str(coverage),
                     "--artifacts-dir",
                     str(work / "youtube"),
+                    "--validation",
+                    str(validation),
                     "--topic",
                     "AI動画調査",
                     "--report-dir",
@@ -720,13 +980,15 @@ class SkillScriptsTest(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
-            saved = json.loads(result.stdout)["path"]
+            saved_result = json.loads(result.stdout)
+            self.assertFalse(saved_result["research_incomplete"])
+            saved = saved_result["path"]
             saved_path = Path(saved)
             self.assertEqual(saved_path.name, "report.md")
             self.assertEqual(saved_path.parent.parent, report_dir.resolve())
             self.assertTrue(saved_path.exists())
             self.assertTrue(saved_path.read_text(encoding="utf-8").startswith("## 調査状況"))
-            artifacts_path = Path(json.loads(result.stdout)["artifacts_path"])
+            artifacts_path = Path(saved_result["artifacts_path"])
             self.assertEqual(artifacts_path, saved_path.parent / "artifacts")
             self.assertTrue((artifacts_path / "youtube" / "abc123" / "transcript.json").exists())
             self.assertFalse((artifacts_path / "youtube" / "abc123" / "ignored.bin").exists())

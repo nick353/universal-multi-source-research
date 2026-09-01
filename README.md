@@ -12,6 +12,12 @@ topic / question / one or more URLs / transcript
 
 このプラグインが主役となって、調査テーマ・質問・URLから取得先を自動選択し、複数媒体の情報をまとめます。媒体接続のための取得ランタイムは内部で利用しますが、利用者は個別の媒体ごとに別のSkillを呼び出す必要はありません。システムの診断・設定・ログイン・成功/失敗通知は英語で表示し、調査レポート本文は日本語を標準にします。
 
+## 4媒体の完了保証
+
+通常の非限定リサーチでは、YouTube・X・Reddit・通常Webを必須媒体として扱います。検索計画や検索スニペットだけでは完了にならず、各媒体の専用runner実行、terminal成功、本文付きの媒体固有URL、取得方法を最終ゲートで検証します。YouTubeは個別字幕または検証済みメタデータ、Webは開いたページ本文、X/Redditは投稿・コメント本文が必要です。
+
+1媒体でも未設定、ログイン要求、ブロック、タイムアウト、本文なしになった場合は `research_incomplete` として報告し、Webだけで代替した完了レポートは保存しません。最終検証契約は `core4_strict_v1` です。明示的に媒体を限定した依頼は、その指定された範囲で実行します。
+
 ## What it does
 
 You can say “このテーマを調査して” without listing platforms. The Skill plans YouTube, X, Reddit, ordinary Web search and page reading, GitHub, Hacker News, and RSS, then adds relevant configured sources. Ordinary Web search includes official sites, documentation, news, blogs, Q&A, and primary sources. A URL can be a YouTube, X, Reddit, GitHub, article, PDF, channel, playlist, or a mixture of URLs.
@@ -47,10 +53,10 @@ For a single-video-only task, explicitly say “このYouTube動画1本だけを
 
 このプラグインをインストールしただけで、調査の指示・計画・Web/YouTube/GitHub/RSSの基本取得は始められます。ただし、XやRedditのログインが必要な情報は、利用者自身の環境で一度だけ接続設定が必要です。
 
-最初の実行時は、Skillが内部で英語の診断アダプターを使います。手動で確認する場合は、Skill内の次のスクリプトを実行してください。
+最初の実行時に、次の確認をしてください。
 
 ```bash
-python3 skills/youtube-multi-source-research/scripts/agent_reach_status.py
+python3 skills/youtube-multi-source-research/scripts/agent_reach_status.py --json
 ```
 
 表示された媒体の状態に従って設定します。

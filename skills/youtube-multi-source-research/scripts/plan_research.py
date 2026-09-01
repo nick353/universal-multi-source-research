@@ -43,11 +43,11 @@ SOURCE_TARGETS = {
 
 MODE_CONFIG = {
     "quick": {
-        "sources": ["youtube", "web"],
+        "sources": ["youtube", "x", "reddit", "web"],
         "youtube_target": 3,
         "youtube_maximum": 5,
         "youtube_minimum": 2,
-        "query_family_ids": ["exact", "japanese", "official", "experience", "criticism"],
+        "query_family_ids": ["exact", "japanese", "official", "experience", "criticism", "reddit_comments"],
         "label": "簡易調査",
     },
     "standard": {
@@ -82,6 +82,15 @@ OPTIONAL_COLLECTION_LIMITS = {
 COLLECTION_LIMITS = {
     "quick": {
         "youtube": {"items": limit_spec(3, 2, 5)},
+        "x": {
+            "primary_posts": limit_spec(2, 2, 5),
+            "replies": limit_spec(2, 0, 5),
+            "quoted_posts": limit_spec(0, 0, 2),
+        },
+        "reddit": {
+            "submissions": limit_spec(2, 2, 5),
+            "comments": limit_spec(2, 0, 5),
+        },
         "web": {"opened_pages": limit_spec(3, 1, 6)},
     },
     "standard": {
@@ -187,17 +196,17 @@ def source_expansion(seed_type: str, mode: str = "standard") -> list[str]:
         "web_pdf": ["web", "x", "reddit", "youtube", "github"],
     }
     quick_expansions = {
-        "youtube": ["youtube", "web"],
-        "x": ["x", "web", "youtube"],
-        "reddit": ["reddit", "web", "youtube"],
-        "github": ["github", "web", "youtube"],
-        "web": ["web", "youtube"],
-        "web_pdf": ["web", "youtube"],
+        "youtube": ["youtube", "x", "reddit", "web"],
+        "x": ["x", "reddit", "web", "youtube"],
+        "reddit": ["reddit", "x", "web", "youtube"],
+        "github": ["github", "x", "reddit", "web", "youtube"],
+        "web": ["web", "x", "reddit", "youtube"],
+        "web_pdf": ["web", "x", "reddit", "youtube"],
     }
     if mode == "quick":
         if seed_type in OPTIONAL_SOURCES:
-            return [seed_type, "web", "youtube"]
-        return quick_expansions.get(seed_type, ["web", "youtube"])
+            return [seed_type, "x", "reddit", "web", "youtube"]
+        return quick_expansions.get(seed_type, ["web", "x", "reddit", "youtube"])
     if seed_type in OPTIONAL_SOURCES:
         return [seed_type, "x", "reddit", "youtube", "web", "github"]
     return expansions.get(seed_type, DEFAULT_SOURCES[:])
@@ -264,7 +273,7 @@ def build_plan(question: str, urls: list[str], window_days: int, requested_mode:
         or re.search(r"youtube|ユーチューブ", question, re.I)
     )
     non_youtube_sources = [source for source in sources if source != "youtube"]
-    corroboration_required = mode in {"standard", "deep"} and youtube_focused
+    corroboration_required = youtube_focused
     source_records = [
         {
             "source": source,
@@ -322,7 +331,7 @@ def build_plan(question: str, urls: list[str], window_days: int, requested_mode:
             "optional_candidates": optional_candidates,
             "optional_candidates_included_by_default": mode in {"standard", "deep"},
             "all_platform_wording_required": False,
-            "seed_expansion": "mode-bounded; Quick keeps only seed plus YouTube/Web corroboration",
+            "seed_expansion": "mode-bounded; X and Reddit remain required community sources in every mode",
         },
         "source_balance": {
             "core_source_count": len([source for source in sources if source in CORE_SOURCES]),
@@ -345,12 +354,17 @@ def build_plan(question: str, urls: list[str], window_days: int, requested_mode:
             "required_result_roles": ["official", "primary", "news", "blog", "q_and_a"],
         },
         "community_policy": {
+            "required_sources": ["x", "reddit"],
+            "live_gate_required_in_every_mode": True,
+            "minimum_relevant_body_records_per_source": 2,
             "reddit_comments_required": True,
             "github_issues_required": True,
             "github_discussions_required": True,
         },
         "principles": [
             "A blocked or unconfigured source is not no_results.",
+            "Every non-narrowed run must pass the X/Reddit live retrieval gate before collection or report saving.",
+            "A plan or source-health result is never retrieval evidence.",
             "Repeated or copied content is not independent corroboration.",
             "Search snippets are leads; important claims require the original URL.",
             "The final answer must start with the source coverage block before the conclusion.",
