@@ -16,6 +16,8 @@ topic / question / one or more URLs / transcript
 
 通常の非限定リサーチでは、YouTube・X・Reddit・通常Webを必須媒体として扱います。検索計画や検索スニペットだけでは完了にならず、各媒体の専用runner実行、terminal成功、本文付きの媒体固有URL、取得方法を最終ゲートで検証します。YouTubeは個別字幕または検証済みメタデータ、Webは開いたページ本文、X/Redditは投稿・コメント本文が必要です。
 
+実行開始時に、この4媒体を固定順序（YouTube → X → Reddit → Web）でsource-statusへ登録・実行します。Webや公式資料の結果が先に得られても、X・Reddit・YouTubeが未実行のまま完了扱いにはしません。利用者にSkill名、媒体名、媒体ごとの承認を求めません。
+
 1媒体でも未設定、ログイン要求、ブロック、タイムアウト、本文なしになった場合は `research_incomplete` として報告し、Webだけで代替した完了レポートは保存しません。最終検証契約は `core4_strict_v1` です。明示的に媒体を限定した依頼は、その指定された範囲で実行します。
 
 ## What it does

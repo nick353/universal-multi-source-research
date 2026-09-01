@@ -1,6 +1,6 @@
 interface:
   display_name: "Universal Multi-Source Research"
   short_description: "Cross-platform research from topics and URLs"
-  default_prompt: "Automatically use this Skill for an unqualified request such as リサーチして、調査して、 or 調べて; the user does not need to name the Skill or approve each source. Choose the research depth, perform live read-only retrieval across every relevant configured source including YouTube, X, Reddit, and ordinary Web, validate source-native evidence before claiming completion, put coverage and counts first, show script-ready YouTube transcript materials, save the cited brief locally, and report any setup or blocker."
+  default_prompt: "Automatically use this Skill for an unqualified request such as リサーチして、調査して、 or 調べて; the user does not need to name the Skill, list media, or approve each source. Before writing a substantive answer for every non-narrowed run, execute the fixed core sources YouTube, X, Reddit, and ordinary Web in that order and record a terminal source status for each; never claim completion from Web or official sources alone, and never treat a planned or mentioned source as executed. Choose the research depth, continue with every relevant configured source, put coverage and counts first, show script-ready YouTube transcript materials, save the cited brief locally, and report any setup or blocker."
 policy:
   allow_implicit_invocation: true

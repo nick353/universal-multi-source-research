@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 from source_contract import CORE_SOURCES, OPTIONAL_SOURCES, source_from_url
 
 DEFAULT_SOURCES = list(CORE_SOURCES)
+REQUIRED_RESEARCH_SOURCES = ("youtube", "x", "reddit", "web")
 MODE_NAMES = ("quick", "standard", "deep")
 QUERY_FAMILIES = [
     {"id": "exact", "label": "exact topic or entity", "suffix": "", "required": True},
@@ -314,6 +315,8 @@ def build_plan(question: str, urls: list[str], window_days: int, requested_mode:
         "created_at": datetime.now(timezone.utc).isoformat(),
         "question": question,
         "window_days": window_days,
+        "required_sources": list(REQUIRED_RESEARCH_SOURCES),
+        "completion_contract": "core4_strict_v1",
         "seeds": seeds,
         "queries": make_queries(question, urls, families),
         "query_families": query_family_plan(families),
@@ -327,6 +330,7 @@ def build_plan(question: str, urls: list[str], window_days: int, requested_mode:
             "reason": mode_reason,
         },
         "source_selection": {
+            "required_sources": list(REQUIRED_RESEARCH_SOURCES),
             "core_sources": list(CORE_SOURCES),
             "optional_candidates": optional_candidates,
             "optional_candidates_included_by_default": mode in {"standard", "deep"},

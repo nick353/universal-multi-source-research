@@ -145,6 +145,9 @@ class SkillScriptsTest(unittest.TestCase):
     def test_standard_includes_optional_candidates_without_all_platform_wording(self):
         plan = self.run_plan("--question", "Geminiの使い方を調査して")
         self.assertEqual(plan["mode"], "standard")
+        self.assertEqual(plan["required_sources"], ["youtube", "x", "reddit", "web"])
+        self.assertEqual(plan["completion_contract"], "core4_strict_v1")
+        self.assertEqual(plan["source_selection"]["required_sources"], ["youtube", "x", "reddit", "web"])
         self.assertEqual(set(plan["source_selection"]["optional_candidates"]), {
             "tiktok", "instagram", "bluesky", "linkedin", "arxiv", "polymarket", "bilibili", "xiaohongshu",
             "facebook", "v2ex", "xiaoyuzhou", "xueqiu",
@@ -152,6 +155,14 @@ class SkillScriptsTest(unittest.TestCase):
         self.assertTrue(plan["source_selection"]["optional_candidates_included_by_default"])
         self.assertFalse(plan["source_selection"]["all_platform_wording_required"])
         self.assertEqual(plan["source_balance"]["optional_candidate_count"], 12)
+
+    def test_automatic_entry_metadata_requires_core4_before_answer(self):
+        prompt = (ROOT / "agents" / "openai.yaml").read_text(encoding="utf-8")
+        manifest = json.loads((ROOT.parents[1] / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
+        self.assertIn("Before writing a substantive answer", prompt)
+        self.assertIn("YouTube, X, Reddit, and ordinary Web", prompt)
+        self.assertIn("terminal source status", prompt)
+        self.assertIn("before claiming completion", manifest["interface"]["defaultPrompt"])
 
     def test_standard_has_source_specific_collection_limits(self):
         plan = self.run_plan("--question", "Geminiの使い方を調査して")

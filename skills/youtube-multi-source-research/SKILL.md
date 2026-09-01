@@ -15,6 +15,10 @@ For an unqualified external request such as “リサーチして”, “調査�
 
 For an ordinary unqualified run, the completion contract is the four-source core: YouTube, X, Reddit, and ordinary Web. Internal adapters such as Agent-Reach or last30days-skill may collect or rank evidence, but they never replace a core-source execution or its source-native evidence.
 
+### Hard automatic start invariant
+
+Before writing a substantive answer for any non-narrowed request, create and execute one source-status entry for each required source in this fixed order: `youtube`, `x`, `reddit`, `web`. Do not start with Web or official sources and add the community/video sources only if time remains. A source is not considered executed because it appears in a plan, is mentioned in a sentence, or is available through an adapter. If any of the four entries is missing a terminal result, keep the run `research_incomplete` and show that source's exact status. No per-source approval prompt is needed for ordinary public read-only retrieval.
+
 ## Default research depth
 
 Unless the user explicitly narrows the scope to particular media, make these four media mandatory on every ordinary research run:

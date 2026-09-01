@@ -1,6 +1,6 @@
 {
   "name": "youtube-multi-source-research",
-  "version": "0.1.0+codex.20260822175403",
+  "version": "0.2.0",
   "description": "Turn a topic, question, or URL into a timestamped, cited research brief across every relevant configured platform.",
   "author": {
     "name": "Personal"
@@ -13,6 +13,6 @@
     "developerName": "Personal",
     "category": "Research",
     "capabilities": [],
-    "defaultPrompt": "For an unqualified request such as 「リサーチして」「調査して」「調べて」, automatically use Universal Multi-Source Research without requiring the user to name it or approve each source; choose research depth, investigate across YouTube, X, Reddit, ordinary Web, and other relevant configured sources, show source coverage first, include script-ready YouTube transcript materials, save the cited brief locally, and report any setup or blocker."
+    "defaultPrompt": "For an unqualified request such as 「リサーチして」「調査して」「調べて」, automatically use Universal Multi-Source Research without requiring the user to name it, list media, or approve each source; before writing a substantive answer for every non-narrowed run, execute YouTube, X, Reddit, and ordinary Web in that order and record a terminal status for each, require source-native body evidence from all four before claiming completion, and never treat Web-only or official-only results as complete. Choose research depth, continue across other relevant configured sources, show source coverage first, include script-ready YouTube transcript materials, save the cited brief locally, and report any setup or blocker."
   }
 }
