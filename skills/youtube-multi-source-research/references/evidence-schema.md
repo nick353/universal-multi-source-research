@@ -32,7 +32,7 @@ Store one JSON object per line in `evidence.jsonl`. Do not store cookies, tokens
 
 ### `source`
 
-`youtube`, `x`, `reddit`, `web`, `github`, `hacker_news`, `tiktok`, `other`.
+Canonical IDs are `youtube`, `x`, `reddit`, `web`, `github`, `hacker_news`, `rss`, `tiktok`, `instagram`, `bluesky`, `linkedin`, `arxiv`, `polymarket`, `bilibili`, `xiaohongshu`, `facebook`, `v2ex`, `xiaoyuzhou`, and `xueqiu`. The legacy compatibility value `other` is preserved when explicitly supplied. Known host aliases are normalized by `scripts/source_contract.py`; unknown HTTP(S) hosts fall back to `web`.
 
 ### `retrieval_method`
 
@@ -67,3 +67,5 @@ Use the most specific method available:
 - `engagement` is optional and must preserve the platform's meaning. Do not compare a Reddit score and an X like count as if they were the same metric.
 - `retrieved_at` is required even when `published_at` is unknown.
 - If a source failed, write a source-status record rather than an empty evidence record.
+
+For source-status packets, YouTube uses separate `count` (candidate videos) and `usable_count` (videos with usable transcript/metadata evidence). `usable_count` is mandatory when YouTube is required; candidate URLs alone do not satisfy retrieval.
