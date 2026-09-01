@@ -8,7 +8,7 @@ Codex Skill for researching a topic, question, one or more URLs, or an existing 
 
 The package slug is `youtube-multi-source-research` for compatibility. The display name is **Universal Multi-Source Research**.
 
-このSkillが調査の入口・媒体選択・主張比較・レポート作成を担当します。媒体取得のための内部ランタイムを利用しますが、利用者は個別の媒体ごとに別のSkillを組み合わせて呼び出す必要はありません。バンドルされたスクリプトは、調査計画、台本正規化、台本分割、共通証拠JSONL、英語のランタイム診断を安定して処理します。
+このSkillが調査の入口・媒体選択・主張比較・レポート作成を担当します。利用者がSkill名を書かずに「リサーチして」「調査して」「調べて」と依頼した場合も、このSkillを自動選択します。媒体取得のための内部ランタイムを利用しますが、利用者は個別の媒体ごとに別のSkillを組み合わせて呼び出す必要はありません。バンドルされたスクリプトは、調査計画、台本正規化、台本分割、共通証拠JSONL、英語のランタイム診断を安定して処理します。
 
 インストール後、初回だけ英語の診断アダプターを実行してください。YouTube、通常Web、RSS、公開GitHubは環境によってすぐ使えます。XとRedditはログイン状態や読み取り設定が必要な場合があります。Cookie・APIキー・トークンはチャットへ貼らず、利用者のローカル環境だけで設定してください。システムの設定・ログイン・成功/失敗通知は英語で表示し、研究レポート本文は日本語を標準にします。
 

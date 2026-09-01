@@ -20,7 +20,9 @@ topic / question / one or more URLs / transcript
 
 ## What it does
 
-You can say “このテーマを調査して” without listing platforms. The Skill plans YouTube, X, Reddit, ordinary Web search and page reading, GitHub, Hacker News, and RSS, then adds relevant configured sources. Ordinary Web search includes official sites, documentation, news, blogs, Q&A, and primary sources. A URL can be a YouTube, X, Reddit, GitHub, article, PDF, channel, playlist, or a mixture of URLs.
+You can say “このテーマを調査して” without naming a Skill or listing platforms. The Skill plans YouTube, X, Reddit, ordinary Web search and page reading, GitHub, Hacker News, and RSS, then adds relevant configured sources. Ordinary Web search includes official sites, documentation, news, blogs, Q&A, and primary sources. A URL can be a YouTube, X, Reddit, GitHub, article, PDF, channel, playlist, or a mixture of URLs.
+
+The `$youtube-multi-source-research` form remains available as an explicit override, but it is not required. An explicit request such as “Webだけ” or “このYouTube動画1本だけ” still narrows the scope.
 
 An X post/thread URL or Reddit post/comment/subreddit URL is a valid seed. The Skill reads the seed and expands to linked sources, related YouTube videos, other community discussions, ordinary Web results, and GitHub evidence when relevant.
 
