@@ -17,7 +17,9 @@ For an ordinary unqualified run, the completion contract is the four-source core
 
 ### Hard automatic start invariant
 
-Before writing a substantive answer for any non-narrowed request, create and execute one source-status entry for each required source in this fixed order: `youtube`, `x`, `reddit`, `web`. Do not start with Web or official sources and add the community/video sources only if time remains. A source is not considered executed because it appears in a plan, is mentioned in a sentence, or is available through an adapter. If any of the four entries is missing a terminal result, keep the run `research_incomplete` and show that source's exact status. No per-source approval prompt is needed for ordinary public read-only retrieval.
+Before writing a substantive answer for any non-narrowed request, start the common runner. It creates one shared `run_id`, the selected research mode, the plan, and a terminal-status ledger with the required sources in this fixed order: `youtube`, `x`, `reddit`, `web`. Then execute the adapters in that order and record each terminal result with the runner. Do not start with Web or official sources and add the community/video sources only if time remains. A source is not considered executed because it appears in a plan, is mentioned in a sentence, or is available through an adapter. If any of the four entries is missing a terminal result, keep the run `research_incomplete` and show that source's exact status. No per-source approval prompt is needed for ordinary public read-only retrieval.
+
+The runner is the shared entrypoint for this Skill; `agent-reach`, `last30days-skill`, `yt-dlp`, OpenCLI, PRAW, Web search, and other platform tools are adapters behind it. Do not call an adapter as an alternate final-research entrypoint. The runner coordinates the adapters but cannot create credentials or make an unavailable provider return evidence.
 
 ## Default research depth
 
@@ -32,7 +34,7 @@ If a required platform or adapter is unavailable, record the exact status and co
 
 ## Automatic research mode
 
-Do not ask the user to choose a mode. Run `scripts/plan_research.py` with its default `--mode auto` and use the selected mode in the plan and report.
+Do not ask the user to choose a mode. Run `scripts/research_runner.py start` with its default `--mode auto`; it calls the deterministic planner and uses the selected mode in the plan, source status, validation, coverage, and report.
 
 - **Quick**: short factual checks, definitions, “要点だけ”, or an explicitly single-video request. Target 3–5 YouTube videos and a smaller query set, but still run the bounded X/Reddit live gate and collect the minimum community evidence floor.
 - **Standard**: the default for a normal topic or URL investigation. Search the core configured set, include the optional sources as candidates, and target 5–10 diverse YouTube videos.
@@ -40,7 +42,7 @@ Do not ask the user to choose a mode. Run `scripts/plan_research.py` with its de
 
 Quick remains bounded by smaller collection limits, but the non-narrowed completion set is still exactly YouTube, X, Reddit, and ordinary Web. Standard and Deep record `source_selection` and `source_balance`; when focused on YouTube they require non-YouTube corroboration. A `planned` source is only a plan entry and must never be reported as retrieved evidence.
 
-Standard and Deep also record source-specific `collection_limits` with `target`, `min`, and `max` values. X is counted separately as primary posts, replies, and quoted posts; Reddit separates submissions and comments; GitHub separates repositories, Issues, Discussions, and releases; Web counts opened deduplicated pages. Report shortfalls instead of silently accepting a smaller sample.
+Standard and Deep also record source-specific `collection_limits` with `target`, `min`, and `max` values. X is counted separately as primary posts, replies, and quoted posts; Reddit separates submissions and comments; GitHub separates repositories, Issues, Discussions, and releases; Web counts opened deduplicated pages. The runner's final validation enforces the selected mode's minimum evidence floor and the plan's query-family execution ledger. Report shortfalls instead of silently accepting a smaller sample.
 
 Source selection remains automatic inside the selected mode. A seed URL always forces its own platform and required corroboration sources into the plan. If the user explicitly requests a mode, honor it; otherwise never expose a mode-selection question.
 
@@ -96,6 +98,27 @@ Use the source status from the diagnostic output. Do not ask the user to paste c
 ## Non-negotiable live retrieval gate
 
 The plan, `agent-reach doctor`, a connector list, a search snippet, or a statement that a source is configured is not retrieval evidence. A research run is only complete after it has live source-native results and a source-status packet that passes validation.
+
+Start every ordinary run with the common ledger:
+
+```bash
+python3 scripts/research_runner.py start \
+  --mode auto \
+  --question "主要な調査語" \
+  --work-dir work
+```
+
+After each adapter returns, record its terminal packet without asking the user for a per-source approval:
+
+```bash
+python3 scripts/research_runner.py record --work-dir work --source youtube --packet work/youtube-status.json
+python3 scripts/research_runner.py record --work-dir work --source x --packet work/x-status.json
+python3 scripts/research_runner.py record --work-dir work --source reddit --packet work/reddit-status.json
+python3 scripts/research_runner.py record --work-dir work --source web --packet work/web-status.json
+python3 scripts/research_runner.py finalize --work-dir work
+```
+
+`record` accepts a source-status object or a JSON object containing exactly one matching record in `sources`. It never upgrades a planned source to success automatically. Each packet must retain `runner_executed`, `terminal_success`, `evidence_retrieved`, source-native URLs, retrieval method, and the applicable evidence count. If an adapter needs authentication, record `auth_required` or `not_configured`; do not convert it to `no_results`.
 
 For every non-narrowed research run, including Quick, run the bundled admission gate below before substantive collection. Use the same query family and the same configured backend for the actual X/Reddit collection:
 
@@ -165,10 +188,14 @@ Before rendering or saving a report, make the source-status packet include `coun
 python3 scripts/validate_research_evidence.py \
   --input work/source-status.json \
   --require-core-4 \
+  --plan work/research-plan.json \
+  --require-mode-contract \
   --out work/research-validation.json
 ```
 
 The validator emits the immutable contract name `core4_strict_v1` and blockers in the fixed source order. If it fails, label the run `research_incomplete`, show the exact source/stage/reason blocker (`auth_required`, `blocked`, `no_results`, `not_configured`, `error`, `runner_not_executed`, `terminal_failure`, `no_valid_evidence`, or `invalid_provenance`), and do not write or describe a completed cross-platform brief. A partial report may be written only when explicitly requested and must use the partial-save path; it is never a successful research completion. A `planned` source is never evidence. If the task is running in a background/automation session and there is no actual research turn or tool output, apply the same rule: report `research_incomplete` instead of implying that research occurred.
+
+When the common runner is used, `--require-mode-contract` also checks that the plan and status share the same `run_id` and Quick/Standard/Deep value, every planned query family has an execution receipt, and each core source meets that mode's minimum evidence floor. The target is a collection goal; the minimum is the smallest count that can support a `complete` result.
 
 ## Input modes
 
@@ -180,7 +207,7 @@ When YouTube is relevant, search for multiple candidate videos rather than selec
 
 ### One or more URLs
 
-Run `scripts/plan_research.py --mode auto` first. A single X post, X thread, Reddit post, Reddit comment permalink, subreddit URL, or a mixture of these and other URLs is a valid input. Classify each URL and expand it into related evidence:
+Run `scripts/research_runner.py start --mode auto` first. A single X post, X thread, Reddit post, Reddit comment permalink, subreddit URL, or a mixture of these and other URLs is a valid input. Classify each URL and expand it into related evidence. Use `scripts/plan_research.py` directly only for planner-level diagnostics, not as a substitute for the common run ledger:
 
 | Seed URL | Required expansion |
 | --- | --- |
@@ -288,7 +315,7 @@ When multiple videos cover the same claim, compare:
 
 ### 5. Search and collect every relevant configured platform
 
-Use every query family in the plan, claim-specific and entity-specific, rather than one giant transcript query. Search the selected source set in parallel where the active tools allow it: YouTube, X, Reddit, Web, GitHub, Hacker News, and RSS. Add relevant optional sources from the plan. Do not skip a required query family in standard/deep mode merely because the first query returned results.
+Use every query family in the plan, claim-specific and entity-specific, rather than one giant transcript query. Search the selected source set in parallel where the active tools allow it: YouTube, X, Reddit, Web, GitHub, Hacker News, and RSS. Add relevant optional sources from the plan. Do not skip a required query family in any selected mode merely because the first query returned results. Pass each executed family ID to `research_runner.py record --query-family <id>` or to the source packet; `finalize` fails when the ledger is incomplete.
 
 Use ordinary Web search for broad discovery, official documentation, news, blogs, Q&A, and primary pages. For GitHub, inspect Issues and Discussions rather than only the README. For Reddit, inspect comments and parent/reply context rather than only post titles. Use last30days-skill for recent cross-source discovery according to its current contract. Use Agent-Reach or the configured official/API adapter for retrieval. Use PRAW when Reddit comments, scores, timestamps, or subreddit filtering need precise repeatability. Open and preserve primary URLs for important claims; a search snippet alone is not equivalent to a source.
 
@@ -337,6 +364,8 @@ python3 scripts/save_report.py \
   --input work/final-report.md \
   --coverage work/coverage.md \
   --artifacts-dir work/youtube \
+  --research-plan work/research-plan.json \
+  --source-status work/source-status.json \
   --validation work/research-validation.json \
   --topic "調査テーマ"
 ```
@@ -364,5 +393,6 @@ Say `not corroborated in the searched window` when a claim lacks independent sup
 - Read [references/upstream-mapping.md](references/upstream-mapping.md) when choosing Agent-Reach, last30days-skill, and PRAW.
 - Read [references/evidence-schema.md](references/evidence-schema.md) before writing or validating source records.
 - Read [references/report-template.md](references/report-template.md) when producing a user-facing brief.
+- Use `scripts/research_runner.py start`, `record`, and `finalize` as the common entrypoint and run ledger for every ordinary research request.
 - Use `scripts/render_coverage.py` for the mandatory source-status header and `scripts/save_report.py` for the stable local report path.
 - Use the upstream projects' current documentation: [Agent-Reach](https://github.com/Panniantong/Agent-Reach), [last30days-skill](https://github.com/mvanhorn/last30days-skill), and [PRAW](https://github.com/praw-dev/praw).

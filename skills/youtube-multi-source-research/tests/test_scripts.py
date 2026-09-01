@@ -159,10 +159,14 @@ class SkillScriptsTest(unittest.TestCase):
     def test_automatic_entry_metadata_requires_core4_before_answer(self):
         prompt = (ROOT / "agents" / "openai.yaml").read_text(encoding="utf-8")
         manifest = json.loads((ROOT.parents[1] / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
+        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn("Before writing a substantive answer", prompt)
         self.assertIn("YouTube, X, Reddit, and ordinary Web", prompt)
         self.assertIn("terminal source status", prompt)
         self.assertIn("before claiming completion", manifest["interface"]["defaultPrompt"])
+        self.assertIn("research_runner.py start", prompt)
+        self.assertIn("research_runner.py record", skill)
+        self.assertIn("research_runner.py finalize", skill)
 
     def test_standard_has_source_specific_collection_limits(self):
         plan = self.run_plan("--question", "Geminiの使い方を調査して")
@@ -840,6 +844,48 @@ class SkillScriptsTest(unittest.TestCase):
             self.assertEqual([record["status"] for record in packet["sources"]], ["no_results", "no_results"])
             self.assertTrue(packet["validation"]["research_incomplete"])
 
+    def test_research_gate_rejects_source_urls_without_body_evidence(self):
+        with tempfile.TemporaryDirectory() as temp:
+            work = Path(temp)
+            fake = work / "opencli"
+            fake.write_text(
+                "#!/usr/bin/python3\n"
+                "import json, sys\n"
+                "source = sys.argv[1]\n"
+                "url = 'https://x.com/example/status/123' if source == 'twitter' else 'https://www.reddit.com/r/codex/comments/abc/example/'\n"
+                "print(json.dumps([{'id': '1', 'url': url}]))\n",
+                encoding="utf-8",
+            )
+            fake.chmod(0o755)
+            gate = work / "research-gate.json"
+            result = subprocess.run(
+                [sys.executable, str(SCRIPTS / "research_gate.py"), "--query", "Codex Desktop", "--command", str(fake), "--timeout", "2", "--out", str(gate)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 1)
+            packet = json.loads(gate.read_text(encoding="utf-8"))
+            self.assertEqual(packet["status"], "research_incomplete")
+            self.assertTrue(any(item["code"] == "admission_body_evidence_missing" for item in packet["validation"]["blockers"]))
+
+    def test_normalizer_does_not_promote_search_snippets_to_evidence(self):
+        with tempfile.TemporaryDirectory() as temp:
+            work = Path(temp)
+            source = work / "snippet.json"
+            source.write_text(json.dumps({"url": "https://example.com/result", "snippet": "search result only"}), encoding="utf-8")
+            output = work / "evidence.jsonl"
+            result = subprocess.run(
+                [sys.executable, str(SCRIPTS / "normalize_evidence.py"), "--input", str(source), "--output", str(output)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            normalized = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(normalized["text"], "")
+            self.assertEqual(normalized["status"], "unverified")
+
     def test_save_report_refuses_invalid_validation_without_partial_flag(self):
         with tempfile.TemporaryDirectory() as temp:
             work = Path(temp)
@@ -919,6 +965,121 @@ class SkillScriptsTest(unittest.TestCase):
                     else:
                         self.assertEqual(len(plan["query_families"]), 12)
 
+    def runner(self, *arguments: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(SCRIPTS / "research_runner.py"), *arguments],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def write_runner_packet(self, directory: Path, source: str, *, count: int, body_count: int = 0, usable_count: int | None = None) -> Path:
+        native_urls = {
+            "youtube": [f"https://www.youtube.com/watch?v={source}-{index}" for index in range(max(1, min(count, 3)))],
+            "x": [f"https://x.com/example/status/{source}-{index}" for index in range(max(1, min(count, 3)))],
+            "reddit": [f"https://www.reddit.com/r/example/comments/{source}{index}/thread/" for index in range(max(1, min(count, 3)))],
+            "web": [f"https://example.com/{source}-{index}" for index in range(max(1, min(count, 3)))],
+        }
+        record = {
+            "source": source,
+            "status": "complete",
+            "count": count,
+            "evidence_urls": native_urls[source],
+            "retrieval_method": f"test {source} adapter",
+            "runner_executed": True,
+            "terminal_success": True,
+            "evidence_retrieved": True,
+        }
+        if source == "youtube":
+            record["usable_count"] = usable_count if usable_count is not None else count
+        else:
+            record["body_evidence_count"] = body_count or count
+            record["content_records"] = body_count or count
+        packet = directory / f"{source}.json"
+        packet.write_text(json.dumps(record), encoding="utf-8")
+        return packet
+
+    def test_common_runner_creates_one_fixed_core4_ledger_and_preserves_depth(self):
+        with tempfile.TemporaryDirectory() as temp:
+            work = Path(temp)
+            result = self.runner(
+                "start", "--question", "最新のAIエージェントを比較して", "--mode", "auto",
+                "--run-id", "run-test-deep", "--work-dir", str(work),
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            status = json.loads((work / "source-status.json").read_text(encoding="utf-8"))
+            plan = json.loads((work / "research-plan.json").read_text(encoding="utf-8"))
+            self.assertEqual(plan["mode"], "deep")
+            self.assertEqual(status["research_mode"], "deep")
+            self.assertEqual(status["mode"], "deep")
+            self.assertEqual(status["run_id"], plan["run_id"])
+            self.assertEqual(status["source_order"], ["youtube", "x", "reddit", "web"])
+            self.assertEqual([record["source"] for record in status["sources"][:4]], ["youtube", "x", "reddit", "web"])
+            self.assertTrue(all(record["approval_prompted"] is False for record in status["sources"]))
+            self.assertTrue(all(record["status"] == "planned" for record in status["sources"][:4]))
+
+    def test_common_runner_enforces_source_order_and_mode_floor_before_completion(self):
+        with tempfile.TemporaryDirectory() as temp:
+            work = Path(temp)
+            result = self.runner("start", "--question", "通常のテーマを調査して", "--work-dir", str(work), "--run-id", "run-test-standard")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            x_packet = self.write_runner_packet(work, "x", count=10, body_count=10)
+            result = self.runner("record", "--work-dir", str(work), "--source", "x", "--packet", str(x_packet))
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("fixed core-source order violation", result.stderr)
+
+            plan = json.loads((work / "research-plan.json").read_text(encoding="utf-8"))
+            family_ids = [family["id"] for family in plan["query_families"]]
+            packets = {
+                "youtube": self.write_runner_packet(work, "youtube", count=5, usable_count=3),
+                "x": x_packet,
+                "reddit": self.write_runner_packet(work, "reddit", count=3, body_count=3),
+                "web": self.write_runner_packet(work, "web", count=8, body_count=8),
+            }
+            for source in ("youtube", "x", "reddit", "web"):
+                result = self.runner(
+                    "record", "--work-dir", str(work), "--source", source, "--packet", str(packets[source]),
+                    *sum((["--query-family", family] for family in family_ids), []),
+                )
+                self.assertEqual(result.returncode, 0, (source, result.stderr, result.stdout))
+
+            result = self.runner("finalize", "--work-dir", str(work))
+            self.assertEqual(result.returncode, 0, result.stdout)
+            validation = json.loads((work / "research-validation.json").read_text(encoding="utf-8"))
+            self.assertTrue(validation["valid"])
+            self.assertEqual(validation["research_mode"], "standard")
+            self.assertEqual(validation["mode_contract"]["minimums"], {"youtube": 3, "x": 5, "reddit": 3, "web": 8})
+            coverage = (work / "coverage.md").read_text(encoding="utf-8")
+            self.assertTrue(coverage.startswith("## 調査状況（自動選択モード: standard）"))
+
+    def test_common_runner_refuses_deep_completion_below_selected_minimum(self):
+        with tempfile.TemporaryDirectory() as temp:
+            work = Path(temp)
+            result = self.runner("start", "--question", "徹底的に比較して", "--mode", "deep", "--work-dir", str(work), "--run-id", "run-test-deep-shortfall")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            plan = json.loads((work / "research-plan.json").read_text(encoding="utf-8"))
+            family_ids = [family["id"] for family in plan["query_families"]]
+            packets = {
+                "youtube": self.write_runner_packet(work, "youtube", count=4, usable_count=4),
+                "x": self.write_runner_packet(work, "x", count=10, body_count=10),
+                "reddit": self.write_runner_packet(work, "reddit", count=5, body_count=5),
+                "web": self.write_runner_packet(work, "web", count=12, body_count=12),
+            }
+            for source in ("youtube", "x", "reddit", "web"):
+                result = self.runner(
+                    "record", "--work-dir", str(work), "--source", source, "--packet", str(packets[source]),
+                    *sum((["--query-family", family] for family in family_ids), []),
+                )
+                self.assertEqual(result.returncode, 0, (source, result.stderr, result.stdout))
+            result = self.runner("finalize", "--work-dir", str(work))
+            self.assertEqual(result.returncode, 1)
+            validation = json.loads((work / "research-validation.json").read_text(encoding="utf-8"))
+            self.assertFalse(validation["valid"])
+            self.assertTrue(any(
+                blocker.get("code") == "mode_minimum_not_met" and blocker.get("source") == "youtube"
+                for blocker in validation["blockers"]
+            ))
+
     def test_coverage_render_and_stable_report_save(self):
         with tempfile.TemporaryDirectory() as temp:
             work = Path(temp)
@@ -938,6 +1099,8 @@ class SkillScriptsTest(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            plan = work / "research-plan.json"
+            plan.write_text(json.dumps({"run_id": "run-save-test", "mode": "standard"}), encoding="utf-8")
             coverage = work / "coverage.md"
             result = subprocess.run(
                 [sys.executable, str(SCRIPTS / "render_coverage.py"), "--input", str(status), "--out", str(coverage)],
@@ -979,6 +1142,10 @@ class SkillScriptsTest(unittest.TestCase):
                     str(coverage),
                     "--artifacts-dir",
                     str(work / "youtube"),
+                    "--research-plan",
+                    str(plan),
+                    "--source-status",
+                    str(status),
                     "--validation",
                     str(validation),
                     "--topic",
@@ -1003,6 +1170,11 @@ class SkillScriptsTest(unittest.TestCase):
             self.assertEqual(artifacts_path, saved_path.parent / "artifacts")
             self.assertTrue((artifacts_path / "youtube" / "abc123" / "transcript.json").exists())
             self.assertFalse((artifacts_path / "youtube" / "abc123" / "ignored.bin").exists())
+            audit_path = Path(saved_result["audit_path"])
+            self.assertEqual(audit_path, saved_path.parent / "audit")
+            self.assertTrue((audit_path / "research-plan.json").exists())
+            self.assertTrue((audit_path / "source-status.json").exists())
+            self.assertTrue((audit_path / "research-validation.json").exists())
 
 
 if __name__ == "__main__":

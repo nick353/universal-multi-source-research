@@ -16,6 +16,16 @@ from source_contract import VALID_SOURCE_IDS, canonical_source, source_from_url
 
 # Compatibility export for callers that used the old normalizer constant.
 SOURCES = set(VALID_SOURCE_IDS)
+EVIDENCE_STATUSES = {
+    "complete",
+    "partial",
+    "auth_required",
+    "blocked",
+    "no_results",
+    "not_configured",
+    "error",
+    "unverified",
+}
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -47,7 +57,7 @@ def as_text(record: dict[str, Any]) -> str:
     # Reddit search exposes the submission body as `selftext`; Reddit read and
     # X expose it as `text`. Keep both paths so a search result is not reduced
     # to a title-only citation.
-    for key in ("text", "body", "selftext", "content", "description", "snippet", "summary"):
+    for key in ("text", "body", "selftext", "content", "description"):
         value = record.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip()
@@ -91,7 +101,7 @@ def engagement(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def normalize(record: dict[str, Any], topic: str | None = None) -> dict[str, Any]:
-    method = str(record.get("retrieval_method", record.get("method", "manual")))
+    method = str(record.get("retrieval_method", record.get("method", "unknown"))).strip() or "unknown"
     confidence = str(record.get("confidence", ""))
     if confidence not in {"high", "medium", "low"}:
         confidence = "high" if method in {"official_api", "praw", "manual"} else "medium" if method in {"agent_reach", "yt_dlp", "youtube_transcript_api", "rss"} else "low"
@@ -113,7 +123,7 @@ def normalize(record: dict[str, Any], topic: str | None = None) -> dict[str, Any
         "claim_ids": [str(item) for item in claim_ids if item is not None],
         "retrieval_method": method,
         "confidence": confidence,
-        "status": record.get("status", "complete"),
+        "status": record.get("status") if record.get("status") in EVIDENCE_STATUSES else "unverified",
     }
     if topic:
         terms = topic_terms(topic)

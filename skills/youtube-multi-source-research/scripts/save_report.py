@@ -64,6 +64,20 @@ def copy_transcript_artifacts(source: Path, output: Path) -> Path | None:
     return destination.parent
 
 
+def copy_audit_artifacts(paths: dict[str, Path], output: Path) -> Path | None:
+    """Copy the redacted machine-readable run contract beside the report."""
+    destination = output.parent / "audit"
+    copied = 0
+    for name, source in paths.items():
+        if not source.exists() or not source.is_file() or source.suffix.lower() not in {".json", ".jsonl", ".md"}:
+            continue
+        target = destination / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+        copied += 1
+    return destination if copied else None
+
+
 def _is_strict_core4_success(validation: dict) -> bool:
     """Only the fixed four-media validation contract may be saved as complete."""
     required = validation.get("required_sources")
@@ -84,6 +98,8 @@ def main() -> int:
     parser.add_argument("--report-dir", help="Override the stable report directory for tests or local policy")
     parser.add_argument("--artifacts-dir", help="Transcript artifact directory, normally work/youtube")
     parser.add_argument("--validation", required=True, help="Research evidence validation JSON")
+    parser.add_argument("--research-plan", help="Common-runner research-plan.json to preserve in the report package")
+    parser.add_argument("--source-status", help="Common-runner source-status.json to preserve in the report package")
     parser.add_argument(
         "--allow-partial",
         action="store_true",
@@ -116,6 +132,14 @@ def main() -> int:
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(combine(coverage, report), encoding="utf-8")
     artifacts = copy_transcript_artifacts(Path(args.artifacts_dir).expanduser(), output) if args.artifacts_dir else None
+    audit_inputs = {
+        "research-validation.json": Path(args.validation).expanduser(),
+    }
+    if args.research_plan:
+        audit_inputs["research-plan.json"] = Path(args.research_plan).expanduser()
+    if args.source_status:
+        audit_inputs["source-status.json"] = Path(args.source_status).expanduser()
+    audit = copy_audit_artifacts(audit_inputs, output)
     result = {
         "saved": True,
         "research_incomplete": not validation_valid,
@@ -123,6 +147,7 @@ def main() -> int:
         "package_path": str(output.parent.resolve()),
         "directory": str(output.parent.resolve()),
         "artifacts_path": str(artifacts.resolve()) if artifacts else None,
+        "audit_path": str(audit.resolve()) if audit else None,
     }
     print(json.dumps(result, ensure_ascii=False))
     return 0

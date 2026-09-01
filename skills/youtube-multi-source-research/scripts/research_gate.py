@@ -105,10 +105,42 @@ def main() -> int:
                 }],
             }
 
+    # The admission gate is intentionally smaller than the final core-four
+    # contract, but it must still prove readable source bodies.  A partial
+    # record with only URLs is not a ready X/Reddit gate and must never be
+    # mistaken for retrieval evidence by an alternate entrypoint.
+    admission_blockers: list[dict[str, str]] = []
+    records = {
+        str(record.get("source")): record
+        for record in packet.get("sources", [])
+        if isinstance(record, dict) and record.get("source")
+    }
+    for source in REQUIRED_SOURCES:
+        record = records.get(source)
+        body_count = record.get("content_records", 0) if isinstance(record, dict) else 0
+        if not isinstance(body_count, int) or body_count <= 0:
+            admission_blockers.append({
+                "code": "admission_body_evidence_missing",
+                "source": source,
+                "message": f"{source} admission requires at least one readable source body.",
+            })
+        if not isinstance(record, dict) or record.get("status") != "complete":
+            admission_blockers.append({
+                "code": "admission_not_terminal",
+                "source": source,
+                "message": f"{source} admission requires a complete terminal probe result.",
+            })
+    if admission_blockers:
+        validation["valid"] = False
+        validation["research_incomplete"] = True
+        validation.setdefault("blockers", []).extend(admission_blockers)
+
     valid = validation.get("valid") is True and validation.get("research_incomplete") is not True
     result = {
         "version": 1,
         "gate": "x_reddit_live_retrieval",
+        "admission_only": True,
+        "completion_contract": "x_reddit_admission_v2",
         "retrieved_at": now_iso(),
         "query": args.query,
         "read_only": True,

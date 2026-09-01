@@ -69,3 +69,16 @@ Use the most specific method available:
 - If a source failed, write a source-status record rather than an empty evidence record.
 
 For source-status packets, YouTube uses separate `count` (candidate videos) and `usable_count` (videos with usable transcript/metadata evidence). `usable_count` is mandatory when YouTube is required; candidate URLs alone do not satisfy retrieval.
+
+## Common runner metadata
+
+For an ordinary non-narrowed run, create the packet with `scripts/research_runner.py start` and keep these fields unchanged across plan, status, validation, coverage, and saved report audit files:
+
+- `contract_version`: `universal_research_run.v1`
+- `run_id`: one stable identifier for the entire run
+- `research_mode` / `mode`: `quick`, `standard`, or `deep`
+- `required_sources`: `["youtube", "x", "reddit", "web"]`
+- `source_order`: the same four IDs in that order
+- `query_families_required` and `query_families_executed`
+
+Use `record` only after the adapter has returned a terminal source result. It may preserve `complete`, `partial`, `auth_required`, `blocked`, `no_results`, `not_configured`, or `error`, but it must not turn a planned source into success. `finalize` is the only common-runner completion decision; it requires source-native evidence and the selected mode's minimum counts.

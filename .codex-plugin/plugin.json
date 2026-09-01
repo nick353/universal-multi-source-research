@@ -1,6 +1,6 @@
 {
   "name": "youtube-multi-source-research",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Turn a topic, question, or URL into a timestamped, cited research brief across every relevant configured platform.",
   "author": {
     "name": "Personal"
@@ -9,10 +9,10 @@
   "interface": {
     "displayName": "Universal Multi-Source Research",
     "shortDescription": "Cross-platform research from topics and URLs",
-    "longDescription": "Automatically choose quick, standard, or deep research for a topic or URL, collect across every relevant configured source, show source coverage first, save the read-only cited brief locally, and report any local source setup still required.",
+    "longDescription": "Use one common runner to automatically choose quick, standard, or deep research, execute and record YouTube, X, Reddit, and ordinary Web for every unqualified run, continue across relevant configured sources, show source coverage first, save the read-only cited brief locally, and report any local source setup still required.",
     "developerName": "Personal",
     "category": "Research",
     "capabilities": [],
-    "defaultPrompt": "For an unqualified request such as 「リサーチして」「調査して」「調べて」, automatically use Universal Multi-Source Research without requiring the user to name it, list media, or approve each source; before writing a substantive answer for every non-narrowed run, execute YouTube, X, Reddit, and ordinary Web in that order and record a terminal status for each, require source-native body evidence from all four before claiming completion, and never treat Web-only or official-only results as complete. Choose research depth, continue across other relevant configured sources, show source coverage first, include script-ready YouTube transcript materials, save the cited brief locally, and report any setup or blocker."
+    "defaultPrompt": "For an unqualified request such as 「リサーチして」「調査して」「調べて」, automatically use Universal Multi-Source Research and its common runner without requiring the user to name it, list media, or approve each source; start one run, select Quick/Standard/Deep automatically, execute YouTube, X, Reddit, and ordinary Web in that order, record a terminal status for each, enforce the selected mode's minimum evidence and query-family receipts, require source-native body evidence from all four before claiming completion, and never treat Web-only or official-only results as complete. Continue across other relevant configured sources, show source coverage first, include script-ready YouTube transcript materials, save the cited brief locally, and report any setup or blocker."
   }
 }

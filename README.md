@@ -4,6 +4,8 @@ Codex App plugin for a read-only, topic-first research workflow. The package slu
 
 ```text
 topic / question / one or more URLs / transcript
+  -> common research runner (one run_id + automatic Quick/Standard/Deep mode)
+  -> fixed core-four source ledger (YouTube -> X -> Reddit -> ordinary Web)
   -> automatic source routing
   -> multiple YouTube videos when relevant
   -> X / Reddit / Web / GitHub / Hacker News / RSS and configured optional sources
@@ -17,6 +19,8 @@ topic / question / one or more URLs / transcript
 通常の非限定リサーチでは、YouTube・X・Reddit・通常Webを必須媒体として扱います。検索計画や検索スニペットだけでは完了にならず、各媒体の専用runner実行、terminal成功、本文付きの媒体固有URL、取得方法を最終ゲートで検証します。YouTubeは個別字幕または検証済みメタデータ、Webは開いたページ本文、X/Redditは投稿・コメント本文が必要です。
 
 実行開始時に、この4媒体を固定順序（YouTube → X → Reddit → Web）でsource-statusへ登録・実行します。Webや公式資料の結果が先に得られても、X・Reddit・YouTubeが未実行のまま完了扱いにはしません。利用者にSkill名、媒体名、媒体ごとの承認を求めません。
+
+この順序と実行記録は `scripts/research_runner.py` が共通管理します。各媒体の取得ツール（Agent-Reach、OpenCLI、yt-dlp、PRAW、通常Web検索など）はrunnerの背後のadapterとして扱い、個別adapterの直接実行だけで最終調査を完了扱いにはしません。runnerは認証情報を持たず、利用できない媒体を無理に成功扱いしません。
 
 1媒体でも未設定、ログイン要求、ブロック、タイムアウト、本文なしになった場合は `research_incomplete` として報告し、Webだけで代替した完了レポートは保存しません。最終検証契約は `core4_strict_v1` です。明示的に媒体を限定した依頼は、その指定された範囲で実行します。
 
@@ -38,6 +42,8 @@ The default depth also requires ordinary Web search, official/news/blog/Q&A/prim
 
 Every final answer starts with a source coverage table showing each platform's status, item count, and any setup/block reason. The first screen then gives a short recommendation, a compact comparison, and script-ready YouTube points. Completed reports and available transcript artifacts are saved by default to `~/Documents/Codex/Universal Research/reports/`.
 
+When a report is saved with the common runner, the package also contains an `audit/` directory with the redacted `research-plan.json`, `source-status.json`, and `research-validation.json`, allowing another Skills-compatible host to inspect exactly which four sources ran and why a run was complete or incomplete.
+
 ## Use in Codex App
 
 ```text
@@ -54,6 +60,27 @@ https://github.com/OWNER/REPO
 ```
 
 For a single-video-only task, explicitly say “このYouTube動画1本だけを調査”. Otherwise a supplied YouTube URL is expanded into related videos and cross-platform corroboration.
+
+## Common runner contract
+
+The public Skill starts one ledger before retrieval. Source adapters return terminal packets; the runner records them in the fixed order and validates the selected depth before a report can be called complete.
+
+```bash
+python3 skills/youtube-multi-source-research/scripts/research_runner.py start \
+  --mode auto --question "テーマを調査して" --work-dir work
+python3 skills/youtube-multi-source-research/scripts/research_runner.py record \
+  --work-dir work --source youtube --packet work/youtube-status.json
+python3 skills/youtube-multi-source-research/scripts/research_runner.py record \
+  --work-dir work --source x --packet work/x-status.json
+python3 skills/youtube-multi-source-research/scripts/research_runner.py record \
+  --work-dir work --source reddit --packet work/reddit-status.json
+python3 skills/youtube-multi-source-research/scripts/research_runner.py record \
+  --work-dir work --source web --packet work/web-status.json
+python3 skills/youtube-multi-source-research/scripts/research_runner.py finalize \
+  --work-dir work
+```
+
+`finalize` checks `run_id`, mode, query-family receipts, core-four source-native evidence, and the mode-specific minimum. It writes `research-validation.json` and `coverage.md` even when incomplete, so an unavailable X or Reddit adapter is visible rather than silently replaced by Web. The runner is adapter-neutral: it coordinates and verifies provider results but does not store credentials or bypass provider authentication.
 
 ## インストール後に必要な初回設定
 
@@ -102,6 +129,8 @@ npx skills add nick353/universal-multi-source-research -g -a codex
 
 ```bash
 python3 -m unittest discover -s skills/youtube-multi-source-research/tests -v
+python3 skills/youtube-multi-source-research/scripts/research_runner.py start \
+  --question "テーマを調査して" --mode auto --work-dir work
 python3 skills/youtube-multi-source-research/scripts/plan_research.py \
   --question "テーマを全媒体で調査" \
   "https://www.youtube.com/watch?v=VIDEO_ID" \

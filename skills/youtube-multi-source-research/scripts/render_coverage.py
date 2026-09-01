@@ -30,6 +30,7 @@ SOURCE_LABELS = {
     "xueqiu": "Xueqiu",
 }
 ALLOWED_STATUSES = {"complete", "partial", "auth_required", "blocked", "no_results", "not_configured", "error", "planned"}
+RESEARCH_MODES = {"quick", "standard", "deep"}
 
 
 def load_payload(path: Path) -> dict:
@@ -42,8 +43,22 @@ def load_payload(path: Path) -> dict:
     return payload
 
 
+def selected_mode(payload: dict) -> str:
+    """Prefer research depth metadata; never render an orchestration mode as depth."""
+    research_mode = payload.get("research_mode")
+    if research_mode in RESEARCH_MODES:
+        return research_mode
+    mode_selection = payload.get("mode_selection")
+    if isinstance(mode_selection, dict) and mode_selection.get("selected") in RESEARCH_MODES:
+        return str(mode_selection["selected"])
+    mode = payload.get("mode")
+    if mode in RESEARCH_MODES:
+        return str(mode)
+    return "unknown"
+
+
 def render(payload: dict) -> str:
-    mode = payload.get("mode") or payload.get("mode_selection", {}).get("selected") or "standard"
+    mode = selected_mode(payload)
     lines = [
         f"## 調査状況（自動選択モード: {mode}）",
         "",
