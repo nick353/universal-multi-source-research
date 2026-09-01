@@ -1,6 +1,6 @@
 ---
 name: youtube-multi-source-research
-description: "Research a topic, question, one or more URLs, or an existing transcript across every relevant configured platform, including multiple YouTube videos, X, Reddit, Web, GitHub, Hacker News, RSS, and optional sources. Perform live read-only retrieval, preserve source-native URLs, validate evidence before claiming completion, and extract and compare transcripts, claims, reactions, and first-hand experiences into a cited cross-source brief. Invoke automatically, without requiring the user to say use a skill, when the user asks to リサーチして、調査して、調べて、検索して、探して、比較して、検証して、評判・口コミ・体験談・問題点・最新情報を調べる, or equivalent research in English, especially when multiple sources or community evidence are relevant. Do not use for purely local file/code inspection or when browsing is explicitly excluded."
+description: "Top-level automatic research entry for a topic, question, one or more URLs, or an existing transcript. Research across every relevant configured platform, including multiple YouTube videos, X, Reddit, Web, GitHub, Hacker News, RSS, and optional sources. Perform live read-only retrieval, preserve source-native URLs, validate evidence before claiming completion, and extract and compare transcripts, claims, reactions, and first-hand experiences into a cited cross-source brief. Invoke automatically without requiring the user to name a skill when the user asks to リサーチして、調査して、調べて、検索して、探して、比較して、検証して、評判・口コミ・体験談・問題点・最新情報を調べる, or equivalent research in English. Explicit media limits and purely local file/code inspection take precedence; do not use when browsing is explicitly excluded."
 ---
 
 # Universal Multi-Source Research
@@ -8,6 +8,12 @@ description: "Research a topic, question, one or more URLs, or an existing trans
 Use this Skill as a read-only, topic-first research orchestrator. The input may be a question, a topic, one URL, many URLs, or a transcript/document. Automatically choose the research depth and every relevant configured source, include ordinary Web search and source-page reading, collect multiple independent YouTube videos when YouTube is relevant, compare claims and first-hand reports, save the completed brief to the stable report directory, and return a cited brief with coverage and uncertainty visible.
 
 The package slug remains `youtube-multi-source-research` for backwards compatibility. Its behavior is universal rather than YouTube-only.
+
+## Top-level automatic entry
+
+For an unqualified external request such as “リサーチして”, “調査して”, or “調べて”, select this Skill before choosing an acquisition adapter. The user does not need to mention the Skill name or list the platforms. Keep explicit media limits, a single-video-only request, and a no-browsing instruction authoritative.
+
+For an ordinary unqualified run, the completion contract is the four-source core: YouTube, X, Reddit, and ordinary Web. Internal adapters such as Agent-Reach or last30days-skill may collect or rank evidence, but they never replace a core-source execution or its source-native evidence.
 
 ## Default research depth
 
