@@ -10,6 +10,8 @@ The package slug is `youtube-multi-source-research` for compatibility. The displ
 
 このSkillが調査の入口・媒体選択・主張比較・レポート作成を担当します。利用者がSkill名を書かずに「リサーチして」「調査して」「調べて」と依頼した場合も、このSkillを自動選択します。媒体取得のための内部ランタイムを利用しますが、利用者は個別の媒体ごとに別のSkillを組み合わせて呼び出す必要はありません。バンドルされたスクリプトは、調査計画、台本正規化、台本分割、共通証拠JSONL、英語のランタイム診断を安定して処理します。
 
+通常の公開・読み取り専用リサーチは、媒体ごとの承認確認なしで自動開始します。ログイン、非公開・有料データ、投稿・送信・購入・権限変更・破壊操作は別の承認またはユーザー操作が必要です。
+
 インストール後、初回だけ英語の診断アダプターを実行してください。YouTube、通常Web、RSS、公開GitHubは環境によってすぐ使えます。XとRedditはログイン状態や読み取り設定が必要な場合があります。Cookie・APIキー・トークンはチャットへ貼らず、利用者のローカル環境だけで設定してください。システムの設定・ログイン・成功/失敗通知は英語で表示し、研究レポート本文は日本語を標準にします。
 
 The skill automatically selects quick, standard, or deep research from the request. It targets 3–5, 5–10, or 8–12 YouTube videos respectively, while keeping platform selection automatic. Standard/deep research includes ordinary Web search, official/news/blog/Q&A/primary sources, GitHub Issues/Discussions, Reddit comments, and Japanese/English/synonym/experience/criticism/counterargument query families.

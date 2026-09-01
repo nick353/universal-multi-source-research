@@ -13,6 +13,6 @@
     "developerName": "Personal",
     "category": "Research",
     "capabilities": [],
-    "defaultPrompt": "For an unqualified request such as 「リサーチして」「調査して」「調べて」, automatically use Universal Multi-Source Research without requiring the user to name it; choose research depth, investigate across YouTube, X, Reddit, ordinary Web, and other relevant configured sources, show source coverage first, include script-ready YouTube transcript materials, save the cited brief locally, and report any setup or blocker."
+    "defaultPrompt": "For an unqualified request such as 「リサーチして」「調査して」「調べて」, automatically use Universal Multi-Source Research without requiring the user to name it or approve each source; choose research depth, investigate across YouTube, X, Reddit, ordinary Web, and other relevant configured sources, show source coverage first, include script-ready YouTube transcript materials, save the cited brief locally, and report any setup or blocker."
   }
 }

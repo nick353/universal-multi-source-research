@@ -24,6 +24,8 @@ You can say “このテーマを調査して” without naming a Skill or listi
 
 The `$youtube-multi-source-research` form remains available as an explicit override, but it is not required. An explicit request such as “Webだけ” or “このYouTube動画1本だけ” still narrows the scope.
 
+Normal public/read-only research starts automatically without per-source approval. Authentication, private or paid data, posting, sending, purchasing, permissions, and destructive changes remain separate approval or user-action boundaries.
+
 An X post/thread URL or Reddit post/comment/subreddit URL is a valid seed. The Skill reads the seed and expands to linked sources, related YouTube videos, other community discussions, ordinary Web results, and GitHub evidence when relevant.
 
 YouTube is treated as a source family, not one citation. For relevant topics, the default target is 5–10 diverse videos, with a minimum quality target of three distinct videos when coverage exists. It compares channels, dates, transcripts, claims, primary-source citations, repeated content, and counterpoints. If fewer videos or transcripts are available, the final report says so and lowers confidence.

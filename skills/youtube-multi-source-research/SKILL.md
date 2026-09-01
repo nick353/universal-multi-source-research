@@ -79,6 +79,7 @@ Use the source status from the diagnostic output. Do not ask the user to paste c
 ## Operating contract
 
 - Treat “調査して”, “リサーチして”, “全媒体で”, “比較して”, and equivalent requests as permission to search all relevant configured sources without requiring the user to name each platform.
+- Treat a normal public/read-only research request as execution authorization for source selection, public queries, opening public pages, retrieving public posts/video metadata/captions, local evidence validation, and report generation. Do not ask for approval per source, query, page, or normal retrieval tool; start automatically. This does not authorize login, private or paid data, secrets, posting or engagement, sending, purchasing, permissions, or destructive/irreversible changes.
 - Do not treat `active_backend: null` alone as source unavailability. If the health check says an OpenCLI bridge is connected or explicit credentials are configured, classify the source as `configured_unverified`, run one documented read-only smoke command, and use it when that command succeeds. On failure, preserve the exact `auth_required`, `blocked`, or `error` status; never silently omit the source or call it `no_results`.
 - Default to read-only. Do not post, reply, vote, follow, subscribe, purchase, upload, or modify external content.
 - Never put API keys, OAuth secrets, passwords, cookies, or bearer tokens into transcripts, evidence JSON, reports, prompts, commits, or logs.
